@@ -51,7 +51,37 @@ jobs:
           cat local.properties
 
       - name: Unit tests
-        run: gradle :app:testDebugUnitTest --stacktrace
+        run: gradle :app:testDebugUnitTest --continue --stacktrace
+        continue-on-error: true
+
+      # Publishes the failure text, so a red run explains itself even though the raw
+      # Actions log is not readable without admin rights.
+      - name: Summarise unit test results
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "### Unit test results"
+            echo
+            if [ -d app/build/test-results/testDebugUnitTest ]; then
+              grep -h -o 'name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
+                app/build/test-results/testDebugUnitTest/*.xml || true
+              echo
+              grep -h -A 4 '<failure' app/build/test-results/testDebugUnitTest/*.xml | head -n 160 || true
+            else
+              echo "no test results were produced (the task failed before running any test)"
+            fi
+          } | tee test-summary.md
+          cat test-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary.md
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
