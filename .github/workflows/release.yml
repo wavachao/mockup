@@ -1,0 +1,61 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v1.0.0); must already exist"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build signed APK and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Unit tests
+        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Assemble release APK
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Rename artifact
+        id: apk
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          SOURCE=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          TARGET="timeblock-${VERSION}.apk"
+          cp "$SOURCE" "$TARGET"
+          echo "path=$TARGET" >> "$GITHUB_OUTPUT"
+          ls -lh "$TARGET"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: TimeBlock ${{ github.event.inputs.tag || github.ref_name }}
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
