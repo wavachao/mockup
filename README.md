@@ -80,22 +80,43 @@ ui/
 
 ### 取 APK
 
-1. 打开 Actions → 最近一次成功的 `CI` 运行；
-2. 页面底部 **Artifacts** 下载 `timeblock-apk-<sha>`；
-3. 或者直接打标签，从 Release 页面下载 `timeblock-v1.0.0.apk`。
+1. **推荐**：打开 [Releases](https://github.com/wavachao/mockup/releases) 下载 `timeblock-v1.0.0.apk`（公开直链，不需要登录）；
+2. 或打开 Actions → 最近一次成功的 `CI` 运行 → 页面底部 **Artifacts** 下载 `timeblock-apk-<sha>`
+   （Actions 产物需要登录 GitHub 才能下载）。
 
 release 变体目前用 debug keystore 签名（`app/build.gradle.kts` 里有注释标注），
 目的是让产物能直接安装评估；正式发布前换成自己的 upload key 即可。
+签名与对齐已核验：`apksigner verify` 通过（APK Signature Scheme v2），`zipalign -c 4` 通过。
 
 ### 本地构建（可选）
 
-本机没有 JDK / Android SDK / Gradle，所以默认走云端。若要本地出包：
+默认走云端，但本仓库也验证过完全本地的构建路径。工具链放在 `.tools/`（已被 git 忽略）：
 
-```bash
-# 需要 JDK 17 与 Android SDK（platform 35 + build-tools）
-echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
+.tools/jdk/jdk-17.0.20.1+1        Temurin JDK 17
+.tools/sdk                        Android SDK（platform-tools、platforms;android-35、build-tools;35.0.0）
+.tools/gradle-home                Gradle 缓存与 8.11.1 发行版
+.tools/keystore/debug.keystore    本地调试签名
+```
+
+`local.properties`（同样不入库）把构建指向它们：
+
+```properties
+sdk.dir=E\:\\code\\memo\\.tools\\sdk
+debug.keystore=E\:\\code\\memo\\.tools\\keystore\\debug.keystore
+```
+
+然后直接跑，无需任何云端往返：
+
+```powershell
+$env:JAVA_HOME = "E:\code\memo\.tools\jdk\jdk-17.0.20.1+1"
+$env:ANDROID_HOME = "E:\code\memo\.tools\sdk"
+$env:GRADLE_USER_HOME = "E:\code\memo\.tools\gradle-home"
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+```
+
+> `debug.keystore` 这一项是为无写的 HOME 目录准备的兜底：AGP 默认要在 `~/.android` 生成调试密钥，
+> 在沙箱或只读 HOME 里会以 `AccessDeniedException` 失败。CI 用同样的机制在 `RUNNER_TEMP` 里生成密钥。
 
 ---
 
