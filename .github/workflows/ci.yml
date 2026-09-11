@@ -36,17 +36,31 @@ jobs:
           gradle-version: "8.11.1"
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
+      # AGP would otherwise create ~/.android/debug.keystore, which fails on a read-only
+      # home directory. Generating one in the workspace keeps the build hermetic.
+      - name: Provide a debug keystore
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/debug.keystore"
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE" \
+            -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          printf 'debug.keystore=%s\n' "$KEYSTORE" >> local.properties
+          cat local.properties
+
       - name: Unit tests
-        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+        run: gradle :app:testDebugUnitTest --stacktrace
 
       - name: Assemble debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
 
       - name: Assemble release APK
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+        run: gradle :app:assembleRelease --stacktrace
 
       - name: Lint
-        run: gradle :app:lintDebug --no-daemon --stacktrace
+        run: gradle :app:lintDebug --stacktrace
         continue-on-error: true
 
       - name: Collect APKs
