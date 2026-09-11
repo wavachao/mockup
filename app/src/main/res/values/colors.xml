@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app draws its own dark-first palette in Compose (see ui/theme/Tokens.kt).
+         These platform colours only style the window before the first frame. -->
+    <color name="window_background">#FF07080C</color>
+    <color name="brand_primary">#FF6D5EF8</color>
+    <color name="brand_secondary">#FFA78BFA</color>
+    <color name="ic_launcher_background">#FF101126</color>
+</resources>
