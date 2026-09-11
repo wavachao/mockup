@@ -20,12 +20,17 @@ data class DayStats(
     val doneCount: Int,
     val doneMinutes: Int,
     val plannedMinutes: Int,
+    /** The block that covers [now] or starts next; null once the day is over. */
     val next: com.wavachao.timeblock.data.model.TimeBlock?,
+    val now: LocalDateTime = LocalDateTime.now(),
 ) {
     val completion: Float
         get() = if (blockCount == 0) 0f else doneCount.toFloat() / blockCount.toFloat()
 
     val completionPercent: Int get() = (completion * 100f).toInt()
+
+    /** True while the block in [next] is running rather than merely ahead. */
+    val isLive: Boolean get() = next != null && !next.start.isAfter(now)
 
     companion object {
         fun of(
@@ -35,6 +40,8 @@ data class DayStats(
         ): DayStats {
             val planned = blocks.sumOf { it.durationMinutes.coerceAtLeast(0) }
             val doneMinutes = blocks.filter { it.done }.sumOf { it.durationMinutes.coerceAtLeast(0) }
+            // "Next" deliberately means "the block that owns this moment": an ongoing
+            // block is more useful on the summary card than one that starts later.
             val next = blocks
                 .filter { !it.done && it.end.isAfter(now) }
                 .minByOrNull { it.start }
@@ -45,6 +52,7 @@ data class DayStats(
                 doneMinutes = doneMinutes,
                 plannedMinutes = planned,
                 next = next,
+                now = now,
             )
         }
     }
