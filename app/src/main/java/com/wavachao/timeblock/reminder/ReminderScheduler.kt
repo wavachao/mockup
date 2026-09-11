@@ -6,9 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.content.getSystemService
-import com.wavachao.timeblock.data.local.toModel
+import com.wavachao.timeblock.data.local.toEpochMillis
 import com.wavachao.timeblock.data.model.TimeBlock
-import javax.inject.Inject
 
 /**
  * Schedules (and cancels) the "block is starting" alarm.
@@ -62,7 +61,7 @@ class AndroidReminderScheduler(
     override suspend fun rescheduleAll() {
         val now = System.currentTimeMillis()
         blockProvider()
-            .filter { it.start.toEpochMillisCompat() > now }
+            .filter { it.start.toEpochMillis() > now }
             .forEach { schedule(it) }
     }
 
@@ -85,7 +84,3 @@ class AndroidReminderScheduler(
 
     private fun requestCode(blockId: Long): Int = (blockId % Int.MAX_VALUE).toInt() + 1000
 }
-
-/** Keeps the alarm layer independent of entity mapping details. */
-internal fun TimeBlock.toEpochMillisCompat(): Long =
-    start.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()

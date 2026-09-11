@@ -160,7 +160,7 @@ fun ProfileScreen(
             TokenRow(name = "主色", value = "#6D5EF8", color = BrandColors.Primary)
             TokenRow(name = "辅助", value = "#A78BFA", color = BrandColors.Secondary)
             TokenRow(name = "强调", value = "#22D3EE", color = BrandColors.Cyan)
-            TokenRow(name = "危险", value = "#FB7185", color = BrandColors.danger)
+            TokenRow(name = "危险", value = "#FB7185", color = AppTokens.palette.danger)
         }
 
         Spacer(Modifier.height(14.dp))
