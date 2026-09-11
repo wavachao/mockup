@@ -19,14 +19,15 @@ class StatsTest {
     private fun block(
         date: LocalDate,
         startHour: Int,
+        startMinute: Int = 0,
         minutes: Int,
         category: BlockCategory = BlockCategory.WORK,
         done: Boolean = false,
     ): TimeBlock {
-        val start = date.atTime(LocalTime.of(startHour, 0))
+        val start = date.atTime(LocalTime.of(startHour, startMinute))
         return TimeBlock(
-            id = (date.toEpochDay() * 100 + startHour),
-            title = "$date $startHour",
+            id = date.toEpochDay() * 100 + startHour,
+            title = "$date $startHour:$startMinute",
             start = start,
             end = start.plusMinutes(minutes.toLong()),
             category = category,
@@ -37,9 +38,9 @@ class StatsTest {
     @Test
     fun `day stats sum planned and completed minutes`() {
         val blocks = listOf(
-            block(monday, 9, 90, done = true),
-            block(monday, 11, 60, category = BlockCategory.STUDY),
-            block(monday, 14, 90, category = BlockCategory.SPORT, done = true),
+            block(monday, 9, minutes = 90, done = true),
+            block(monday, 11, minutes = 60, category = BlockCategory.STUDY),
+            block(monday, 14, minutes = 90, category = BlockCategory.SPORT, done = true),
         )
 
         val stats = DayStats.of(monday, blocks, monday.atTime(13, 0))
@@ -52,16 +53,30 @@ class StatsTest {
     }
 
     @Test
-    fun `next block skips finished and past blocks`() {
+    fun `next skips finished and already ended blocks`() {
         val blocks = listOf(
-            block(monday, 9, 60, done = true),
-            block(monday, 11, 60),
-            block(monday, 14, 60),
+            block(monday, 8, minutes = 60, done = true),   // finished
+            block(monday, 9, minutes = 60),                // already over at 12:05
+            block(monday, 14, minutes = 60),               // the only candidate
+        )
+
+        val stats = DayStats.of(monday, blocks, monday.atTime(12, 5))
+
+        assertEquals(monday.atTime(14, 0), stats.next?.start)
+        assertFalse(stats.isLive)
+    }
+
+    @Test
+    fun `next prefers the block that owns this moment`() {
+        val blocks = listOf(
+            block(monday, 11, minutes = 60),  // 11:00-12:00, running at 11:30
+            block(monday, 14, minutes = 60),
         )
 
         val stats = DayStats.of(monday, blocks, monday.atTime(11, 30))
 
-        assertEquals(monday.atTime(14, 0), stats.next?.start)
+        assertEquals(monday.atTime(11, 0), stats.next?.start)
+        assertTrue("an ongoing block is what the summary card should highlight", stats.isLive)
     }
 
     @Test
@@ -70,14 +85,16 @@ class StatsTest {
         assertEquals(0f, stats.completion, 0.001f)
         assertEquals(0, stats.completionPercent)
         assertEquals(null, stats.next)
+        assertFalse(stats.isLive)
     }
 
     @Test
     fun `week insight groups minutes per day and by category`() {
+        val friday = monday.plusDays(4)
         val blocks = listOf(
-            block(monday, 9, 120, category = BlockCategory.WORK),
-            block(monday, 14, 60, category = BlockCategory.STUDY),
-            block(monday.plusDays(4), 18, 30, category = BlockCategory.SPORT),
+            block(monday, 9, minutes = 120, category = BlockCategory.WORK),
+            block(monday, 14, minutes = 60, category = BlockCategory.STUDY),
+            block(friday, 18, minutes = 30, category = BlockCategory.SPORT),
         )
 
         val insight = WeekInsight.of(
@@ -91,12 +108,13 @@ class StatsTest {
         assertEquals(210, insight.totalMinutes)
         assertEquals(110, insight.deltaMinutes)
         assertEquals(180, insight.minutesOn(monday))
-        assertEquals(30, insight.minutesOn(monday.plusDays(4)))
+        assertEquals(0, insight.minutesOn(monday.plusDays(2)))
+        assertEquals(30, insight.minutesOn(friday))
         assertEquals(monday, insight.peakDay)
-        assertEquals(2, insight.slices.size)
-        assertEquals(BlockCategory.WORK, insight.slices.first().category)
+        assertEquals(listOf(BlockCategory.WORK, BlockCategory.STUDY, BlockCategory.SPORT), insight.slices.map { it.category })
         assertEquals(120, insight.slices.first().minutes)
         assertEquals(120f / 210f, insight.slices.first().share, 0.001f)
+        assertEquals(7, insight.perDay.size)
     }
 
     @Test
@@ -123,7 +141,7 @@ class StatsTest {
     }
 
     @Test
-    fun `streak counts consecutive planned days ending today`() {
+    fun `streak counts back from today and falls back to yesterday`() {
         val days = setOf(
             monday,
             monday.plusDays(1),
@@ -131,10 +149,12 @@ class StatsTest {
             monday.plusDays(4),
         )
 
-        // today has no plan yet, so the streak still counts back from yesterday
+        // today (Thursday) has no plan yet, so the streak still counts back from yesterday
         assertEquals(3, planningStreak(days, today = monday.plusDays(3)))
+        // today itself is planned
         assertEquals(1, planningStreak(days, today = monday.plusDays(4)))
-        assertEquals(1, planningStreak(days, today = monday.plusDays(9)))
+        // the most recent plan is five days stale, so nothing is consecutive any more
+        assertEquals(0, planningStreak(days, today = monday.plusDays(9)))
         assertEquals(0, planningStreak(emptySet(), today = monday))
     }
 

@@ -208,7 +208,11 @@ private fun SummaryCard(state: TodayUiState) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("下一个", color = palette.muted, style = AppTokens.type.caption.copy(fontSize = 12.5.sp))
+                    Text(
+                        text = if (stats.isLive) "正在进行" else "下一个",
+                        color = palette.muted,
+                        style = AppTokens.type.caption.copy(fontSize = 12.5.sp),
+                    )
                     val next = stats.next
                     Text(
                         text = next?.let { "${TimeFormat.time(it.start)} ${it.title}" } ?: "没有更多安排",

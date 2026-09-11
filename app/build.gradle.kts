@@ -7,6 +7,37 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/**
+ * The Android debug keystore normally lives in `~/.android`, which is not writable in every
+ * environment (sandboxes, locked-down CI images). When `local.properties` points at a
+ * keystore, that one is used instead; otherwise AGP generates the usual default.
+ *
+ * `local.properties` is a Java properties file, so `\` and `:` arrive escaped and have to be
+ * unescaped before the value is a usable path.
+ */
+val localDebugKeystore: File? = rootProject.file("local.properties")
+    .takeIf { it.isFile }
+    ?.readLines()
+    ?.asSequence()
+    ?.map(String::trim)
+    ?.firstOrNull { it.startsWith("debug.keystore=") }
+    ?.substringAfter('=')
+    ?.trim()
+    ?.replace("\\\\", "\\")
+    ?.replace("\\:", ":")
+    ?.takeIf { it.isNotEmpty() }
+    ?.let(::File)
+    ?.takeIf { it.isFile }
+
+if (localDebugKeystore != null) {
+    // `android.debug.keystore` is only settable from the command line / gradle.properties,
+    // so an unset one is filled in here to keep the build self-contained.
+    if (System.getProperty("android.debug.keystore") == null) {
+        System.setProperty("android.debug.keystore", localDebugKeystore.absolutePath)
+    }
+    logger.lifecycle("TimeBlock: signing debug builds with ${localDebugKeystore.absolutePath}")
+}
+
 android {
     namespace = "com.wavachao.timeblock"
     compileSdk = 35
@@ -20,8 +51,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+    }
 
-        ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+    if (localDebugKeystore != null && localDebugKeystore.exists()) {
+        signingConfigs {
+            getByName("debug") {
+                storeFile = localDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
