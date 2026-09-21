@@ -5,6 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,7 +65,7 @@ private val ScreenPadding = 22.dp
  *
  * The 24-hour timeline is the product, so the screen is a scrollable column containing a
  * fixed-height, absolutely positioned timeline canvas. All geometry comes from
- * [TodayUiState.timeline] (a fixed 46dp hour row), never from a layout pass — that is what
+ * [TodayUiState.timeline] (a fixed 96dp hour row), never from a layout pass — that is what
  * makes `14:00` always land exactly on the `14` hour rule.
  */
 @Composable
@@ -84,7 +88,17 @@ fun TodayScreen(
             onAddForDate = onAddForDate,
         )
         SummaryCard(state)
-        TimelineCanvas(
+        if (state.blocks.isEmpty()) {
+            SurfaceCard(modifier = Modifier.fillMaxWidth().padding(22.dp), contentPadding = 24.dp) {
+                Text("给重要的事留一点时间", style = AppTokens.type.sectionTitle, color = AppTokens.palette.text)
+                Spacer(Modifier.height(10.dp))
+                Text("这一天还没有安排。添加第一个时间段，让计划清晰起来。", style = AppTokens.type.body,
+                    color = AppTokens.palette.textSecondary)
+                Spacer(Modifier.height(20.dp))
+                com.wavachao.timeblock.ui.components.PrimaryButton("添加时间段", { onAddForDate(state.selectedDate) })
+            }
+            Spacer(Modifier.height(96.dp))
+        } else TimelineCanvas(
             state = state,
             onToggleDone = onToggleDone,
             onOpenBlock = onOpenBlock,
@@ -134,7 +148,8 @@ private fun TodayHeader(
             }
             Box(
                 Modifier
-                    .size(42.dp)
+                    .size(48.dp)
+                    .semantics { contentDescription = "添加时间段" }
                     .clip(CircleShape)
                     .background(palette.panel)
                     .border(1.dp, palette.stroke, CircleShape)
@@ -142,19 +157,10 @@ private fun TodayHeader(
                 contentAlignment = Alignment.Center,
             ) {
                 TimeBlockIcon(
-                    icon = BlockIcons.Bell,
+                    icon = BlockIcons.Plus,
                     size = 19.dp,
                     tint = palette.textSecondary,
                 )
-                if (state.stats.blockCount > state.stats.doneCount) {
-                    Box(
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = (-9).dp, y = 9.dp)
-                            .size(7.dp)
-                            .background(palette.danger, CircleShape),
-                    )
-                }
             }
         }
     }
@@ -164,7 +170,8 @@ private fun TodayHeader(
 private fun DateStepButton(icon: com.wavachao.timeblock.ui.icons.IconSpec, onClick: () -> Unit) {
     Box(
         Modifier
-            .size(28.dp)
+            .size(40.dp)
+            .semantics { contentDescription = if (icon == BlockIcons.ChevronLeft) "前一天" else "后一天" }
             .clip(CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -201,7 +208,7 @@ private fun SummaryCard(state: TodayUiState) {
                 Spacer(Modifier.height(9.dp))
                 MeterBar(progress = stats.completion, height = 4.dp)
                 Spacer(Modifier.height(11.dp))
-                SummaryLine(key = "今日时段", value = "${stats.blockCount} 个")
+                SummaryLine(key = if (state.isToday) "今日时段" else "当日时段", value = "${stats.blockCount} 个")
                 Spacer(Modifier.height(9.dp))
                 Row(
                     Modifier.fillMaxWidth(),
@@ -219,6 +226,8 @@ private fun SummaryCard(state: TodayUiState) {
                         color = if (next != null) palette.text else palette.muted,
                         style = AppTokens.type.caption.copy(fontSize = 12.5.sp, fontWeight = FontWeight(700)),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp),
                     )
                 }
             }
@@ -254,14 +263,14 @@ private fun TimelineCanvas(
     val minuteOfDay = state.now.hour * 60 + state.now.minute
     val showNow = state.isToday && layout.containsMinute(minuteOfDay)
     val nowFraction = layout.fractionFor(minuteOfDay)
-    val railPadding = ScreenPadding - TimelineMetrics.gutterWidth
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
             .padding(horizontal = ScreenPadding),
     ) {
+        val contentWidth = maxWidth - TimelineMetrics.blockInset
         Column(Modifier.fillMaxSize()) {
             for (hour in layout.startHour until layout.endHour) {
                 Box(
@@ -280,7 +289,7 @@ private fun TimelineCanvas(
                     HourLabel(
                         hour = hour,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
+                            .align(Alignment.TopStart)
                             .offset(y = (-7).dp),
                     )
                 }
@@ -297,15 +306,15 @@ private fun TimelineCanvas(
 
         layout.blocks.forEach { laid ->
             val blockHeight = TimelineMetrics.hourHeight * (laid.durationMinutes / 60f)
-            val laneFraction = 1f / laid.laneCount
+            val laneWidth = contentWidth / laid.laneCount
             Box(
                 Modifier
                     .offset(
-                        x = TimelineMetrics.blockInset,
+                        x = TimelineMetrics.blockInset + laneWidth * laid.lane,
                         y = TimelineMetrics.hourHeight * (laid.offsetMinutes / 60f),
                     )
-                    .fillMaxWidth(laneFraction)
-                    .height(blockHeight.coerceAtLeast(44.dp))
+                    .width(laneWidth)
+                    .height(blockHeight.coerceAtLeast(24.dp))
                     .padding(end = if (laid.laneCount > 1) 6.dp else 0.dp),
             ) {
                 TimelineBlockCard(
@@ -315,6 +324,7 @@ private fun TimelineCanvas(
                     onToggleDone = { onToggleDone(laid.block) },
                     onClick = { onOpenBlock(laid.block.id) },
                     modifier = Modifier.fillMaxSize(),
+                    compact = laid.laneCount > 1 || blockHeight < 60.dp,
                 )
             }
         }
@@ -331,7 +341,8 @@ private fun TimelineCanvas(
                             x = TimelineMetrics.blockInset,
                             y = TimelineMetrics.hourHeight * (gap.startMinutes / 60f) + 2.dp,
                         )
-                        .padding(end = railPadding),
+                        .width(contentWidth)
+                        .padding(end = TimelineMetrics.blockGap),
                 )
             }
         }
@@ -341,10 +352,11 @@ private fun TimelineCanvas(
                 clockLabel = TimeFormat.clock(state.now),
                 modifier = Modifier
                     .offset(
-                        x = railPadding,
+                        x = TimelineMetrics.blockInset,
                         y = (height * nowFraction) - 6.dp,
                     )
-                    .padding(end = railPadding),
+                    .width(contentWidth)
+                    .padding(end = TimelineMetrics.blockGap),
             )
         }
     }

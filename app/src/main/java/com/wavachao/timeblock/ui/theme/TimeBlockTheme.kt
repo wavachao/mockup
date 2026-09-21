@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -67,43 +69,39 @@ object AppTokens {
         @Composable get() = LocalTimeBlockTokens.current.isDark
 }
 
-/**
- * The prototype is dark-first; the light palette only exists in the mockup for
- * evaluation. Flip this to preview the light design.
- */
-const val USE_LIGHT_PALETTE = false
-
 private val DarkMaterialScheme = darkColorScheme(
-    primary = BrandColors.Primary,
-    onPrimary = Color.White,
+    primary = Color(0xFFB9ADFF),
+    onPrimary = Color(0xFF251650),
     secondary = BrandColors.Secondary,
     background = DarkPalette.background,
     onBackground = DarkPalette.text,
     surface = DarkPalette.backgroundAlt,
     onSurface = DarkPalette.text,
-    surfaceVariant = DarkPalette.panelStrong,
+    surfaceVariant = Color(0xFF292C36),
     onSurfaceVariant = DarkPalette.textSecondary,
     error = DarkPalette.danger,
 )
 
 private val LightMaterialScheme = lightColorScheme(
-    primary = BrandColors.Primary,
-    onPrimary = Color.White,
-    secondary = BrandColors.Secondary,
-    background = LightPalette.background,
-    onBackground = LightPalette.text,
-    surface = LightPalette.backgroundAlt,
-    onSurface = LightPalette.text,
-    surfaceVariant = LightPalette.panelStrong,
-    onSurfaceVariant = LightPalette.textSecondary,
-    error = LightPalette.danger,
+    primary = Color(0xFF176B60), onPrimary = Color.White,
+    primaryContainer = Color(0xFFDDEEE8), onPrimaryContainer = Color(0xFF154E46),
+    secondary = Color(0xFF667E73), secondaryContainer = Color(0xFFE5EEE8),
+    background = Color(0xFFF5F6F2), onBackground = Color(0xFF202D29),
+    surface = Color.White, onSurface = Color(0xFF202D29),
+    surfaceVariant = Color(0xFFEDF1EC), onSurfaceVariant = Color(0xFF68756F),
+    surfaceContainer = Color(0xFFF0F3EE), surfaceContainerHigh = Color(0xFFEDF1EC),
+    outline = Color(0xFF89968F), outlineVariant = Color(0xFFE1E7E1),
+    error = Color(0xFFB44940),
 )
 
 private val MaterialTypography = Typography(
-    headlineLarge = DefaultType.hero,
-    titleMedium = DefaultType.sectionTitle,
-    bodyMedium = DefaultType.body,
-    labelSmall = DefaultType.micro,
+    headlineLarge = androidx.compose.ui.text.TextStyle(fontSize = 32.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.8).sp),
+    headlineMedium = androidx.compose.ui.text.TextStyle(fontSize = 28.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.6).sp),
+    titleLarge = androidx.compose.ui.text.TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 23.sp),
+    bodyLarge = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 21.sp),
+    labelLarge = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
 )
 
 private fun Context.findActivity(): Activity? {
@@ -117,10 +115,9 @@ private fun Context.findActivity(): Activity? {
 
 @Composable
 fun TimeBlockTheme(
-    darkTheme: Boolean = if (USE_LIGHT_PALETTE) false else isSystemInDarkTheme(),
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    // The mockup is a dark design: it stays dark unless the user asks otherwise.
     val resolvedDark = darkTheme
     val palette = if (resolvedDark) DarkPalette else LightPalette
     val tokens = remember(resolvedDark) { tokensFor(palette) }

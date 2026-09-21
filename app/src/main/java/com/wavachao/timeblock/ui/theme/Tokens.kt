@@ -70,9 +70,9 @@ object BrandColors {
     val Secondary = Color(0xFFA78BFA)
     val Cyan = Color(0xFF22D3EE)
 
-    val Work = Color(0xFF6D5EF8)
-    val Study = Color(0xFF22D3EE)
-    val Life = Color(0xFF34D399)
+    val Work = Color(0xFF397A6A)
+    val Study = Color(0xFF577CAB)
+    val Life = Color(0xFFA56E35)
     val Sport = Color(0xFFFBBF24)
     val Rest = Color(0xFFF472B6)
 
@@ -118,7 +118,7 @@ object Radius {
  * offsets (`09:00 -> top:46px`) reproducible at runtime.
  */
 object TimelineMetrics {
-    val hourHeight: Dp = 46.dp
+    val hourHeight: Dp = 96.dp
     val gutterWidth: Dp = 44.dp
     val blockInset: Dp = 58.dp
     val blockGap: Dp = 6.dp

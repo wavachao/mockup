@@ -26,6 +26,8 @@ data class CategoryTotal(
 
 @Dao
 interface TimeBlockDao {
+    @Query("SELECT * FROM time_blocks ORDER BY startEpochMillis ASC, id ASC")
+    fun observeAll(): Flow<List<TimeBlockEntity>>
 
     @Query(
         """

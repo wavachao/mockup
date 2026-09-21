@@ -12,6 +12,7 @@ import java.time.temporal.TemporalAdjusters
  * keeps the storage choice swappable and the stats logic unit-testable on the JVM.
  */
 interface TimeBlockRepository {
+    fun observeAll(): Flow<List<TimeBlock>>
 
     /** Blocks whose start falls on [date], ordered by start time. */
     fun observeDay(date: LocalDate): Flow<List<TimeBlock>>

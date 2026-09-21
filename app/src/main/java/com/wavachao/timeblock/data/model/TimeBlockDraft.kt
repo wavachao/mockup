@@ -19,12 +19,18 @@ data class TimeBlockDraft(
     val reminderMinutes: Int = 10,
     val recurrence: RecurrenceRule = RecurrenceRule.NONE,
     val notes: String? = null,
+    val done: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
+    val allDay: Boolean = false,
+    val endDate: LocalDate? = null,
 ) {
     /** End after start, spilling into the next day when the user picks e.g. 23:30-00:30. */
-    val start: LocalDateTime get() = date.atTime(startTime)
+    val start: LocalDateTime get() = if (allDay) date.atStartOfDay() else date.atTime(startTime)
 
     val end: LocalDateTime
         get() {
+            if (allDay) return (endDate ?: date).plusDays(1).atStartOfDay()
+            if (endDate != null) return endDate.atTime(endTime)
             val sameDay = date.atTime(endTime)
             return if (sameDay.isAfter(start)) sameDay else sameDay.plusDays(1)
         }
@@ -34,7 +40,21 @@ data class TimeBlockDraft(
 
     fun withDuration(minutes: Int): TimeBlockDraft {
         val safe = minutes.coerceIn(5, 24 * 60)
-        return copy(endTime = startTime.plusMinutes(safe.toLong()))
+        val target = date.atTime(startTime).plusMinutes(safe.toLong())
+        return copy(endTime = target.toLocalTime(), endDate = target.toLocalDate())
+    }
+
+    fun withStartTime(time: LocalTime): TimeBlockDraft = withStart(date, time)
+
+    fun withStart(day: LocalDate, time: LocalTime = startTime): TimeBlockDraft {
+        val target = day.atTime(time).plusMinutes(durationMinutes.toLong())
+        return copy(date = day, startTime = time, endTime = target.toLocalTime(), endDate = target.toLocalDate())
+    }
+
+    val validationError: String? get() = when {
+        title.isBlank() -> "请填写日程名称"
+        !end.isAfter(start) -> "结束时间必须晚于开始时间"
+        else -> null
     }
 
     companion object {
@@ -48,6 +68,10 @@ data class TimeBlockDraft(
             reminderMinutes = block.reminderMinutes,
             recurrence = block.recurrence,
             notes = block.notes,
+            done = block.done,
+            createdAt = block.createdAt,
+            allDay = block.allDay,
+            endDate = if (block.allDay) block.end.toLocalDate().minusDays(1) else block.end.toLocalDate(),
         )
 
         /** A sensible block starting at the next quarter hour, like the quick-add sheet. */

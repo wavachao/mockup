@@ -31,8 +31,12 @@ class AndroidReminderScheduler(
     private val alarmManager: AlarmManager? get() = context.getSystemService()
 
     override suspend fun schedule(block: TimeBlock) {
+        if (block.done || block.reminderMinutes < 0) {
+            cancel(block.id)
+            return
+        }
         val manager = alarmManager ?: return
-        val triggerAt = block.start
+        val triggerAt = (if (block.allDay) block.date.atTime(9, 0) else block.start)
             .minusMinutes(block.reminderMinutes.coerceAtLeast(0).toLong())
             .atZone(java.time.ZoneId.systemDefault())
             .toInstant()
@@ -61,7 +65,6 @@ class AndroidReminderScheduler(
     override suspend fun rescheduleAll() {
         val now = System.currentTimeMillis()
         blockProvider()
-            .filter { it.start.toEpochMillis() > now }
             .forEach { schedule(it) }
     }
 

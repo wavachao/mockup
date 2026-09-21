@@ -102,12 +102,22 @@ fun TimelineBlockCard(
     onToggleDone: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val accent = block.category.color
     val shape = RoundedCornerShape(Radius.inner)
     val background = Brush.linearGradient(
         listOf(accent.copy(alpha = 0.24f), accent.copy(alpha = 0.09f)),
     )
+    if (compact) {
+        Box(modifier.clip(shape).background(background)
+            .border(1.dp, accent.copy(alpha = 0.4f), shape)
+            .clickable(onClick = onClick).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterStart) {
+            Text(block.title, color = AppTokens.palette.text,
+                style = AppTokens.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        return
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()

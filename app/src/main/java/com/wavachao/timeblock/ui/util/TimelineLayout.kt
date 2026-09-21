@@ -62,6 +62,7 @@ fun buildTimeline(
     defaultStartHour: Int = 8,
     defaultEndHour: Int = 20,
     minGapMinutes: Int = 25,
+    fitToBlocks: Boolean = false,
 ): TimelineLayout {
     val ordered = blocks.sortedBy { it.start }
     if (ordered.isEmpty()) {
@@ -69,13 +70,16 @@ fun buildTimeline(
     }
 
     val earliest = ordered.minOf { it.start.hour }
-    val latestEnd = ordered.maxOf { it.end.hour + if (it.end.minute > 0) 1 else 0 }
-    val startHour = min(defaultStartHour, earliest).coerceIn(0, 23)
-    val endHour = max(defaultEndHour, latestEnd).coerceIn(startHour + 1, 24)
+    val latestEnd = ordered.maxOf {
+        if (it.end.toLocalDate() > it.date) 24 else it.end.hour + if (it.end.minute > 0) 1 else 0
+    }
+    val startHour = (if (fitToBlocks) earliest else min(defaultStartHour, earliest)).coerceIn(0, 23)
+    val endHour = (if (fitToBlocks) latestEnd else max(defaultEndHour, latestEnd)).coerceIn(startHour + 1, 24)
 
     val laid = ordered.map { block ->
         val offset = minutesFromWindowStart(block, startHour)
-        val duration = TimeFormat.minutesBetween(block.start, block.end).coerceAtLeast(1)
+        val duration = TimeFormat.minutesBetween(block.start, block.end)
+            .coerceIn(1, 24 * 60 - block.start.hour * 60 - block.start.minute)
         LaidOutBlock(block = block, offsetMinutes = offset, durationMinutes = duration)
     }
 
@@ -124,13 +128,14 @@ internal fun assignLanes(blocks: List<LaidOutBlock>): List<LaidOutBlock> {
 private fun findGaps(blocks: List<LaidOutBlock>, minGapMinutes: Int): List<IdleGap> {
     if (blocks.size < 2) return emptyList()
     val gaps = mutableListOf<IdleGap>()
+    var occupiedUntil = blocks.first().endOffsetMinutes
     for (index in 0 until blocks.size - 1) {
-        val current = blocks[index]
         val next = blocks[index + 1]
-        val gap = next.offsetMinutes - current.endOffsetMinutes
+        val gap = next.offsetMinutes - occupiedUntil
         if (gap >= minGapMinutes) {
-            gaps += IdleGap(current.endOffsetMinutes, next.offsetMinutes)
+            gaps += IdleGap(occupiedUntil, next.offsetMinutes)
         }
+        occupiedUntil = max(occupiedUntil, next.endOffsetMinutes)
     }
     return gaps
 }

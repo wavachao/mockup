@@ -35,6 +35,7 @@ data class TimeBlockEntity(
     val recurrence: String = RecurrenceRule.NONE.name,
     @ColumnInfo(defaultValue = "") val subtasks: String = "",
     val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "0") val allDay: Boolean = false,
 )
 
 /** `yyyy-MM-ddTHH:mm` — minute precision is enough for a planning app. */
@@ -97,6 +98,7 @@ fun TimeBlockEntity.toModel(fallbackCategory: BlockCategory = BlockCategory.WORK
         reminderMinutes = reminderMinutes,
         recurrence = RecurrenceRule.fromStorage(recurrence),
         createdAt = createdAt,
+        allDay = allDay,
     )
 }
 
@@ -113,4 +115,5 @@ fun TimeBlock.toEntity(): TimeBlockEntity = TimeBlockEntity(
     reminderMinutes = reminderMinutes,
     recurrence = recurrence.name,
     createdAt = createdAt,
+    allDay = allDay,
 )

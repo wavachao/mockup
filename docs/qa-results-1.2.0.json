@@ -1,0 +1,21 @@
+{
+  "version": "1.2.0",
+  "unit": {
+    "tests": 60,
+    "failures": 0,
+    "errors": 0
+  },
+  "android": {
+    "api": 35,
+    "tests": 19,
+    "failures": 0
+  },
+  "small_editor": {
+    "width_dp": 320,
+    "font_scale": 1.3,
+    "tests": 8,
+    "failures": 0
+  },
+  "lint_errors": 0,
+  "sha256": "0d588bad50eff33910f63d8fb1068a2f97ceb17953cb896e0ac9ecd3309f003c"
+}
