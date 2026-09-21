@@ -1,164 +1,170 @@
 # TimeBlock · 时间段待办
 
-记录未来的日程安排：支持具体起止时间、全天事项及跨天安排，按日期查看、搜索、改期和完成。
+[![CI](https://github.com/wavachao/mockup/actions/workflows/ci.yml/badge.svg)](https://github.com/wavachao/mockup/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/wavachao/mockup)](https://github.com/wavachao/mockup/releases/latest)
 
-当前工作区版本 **1.2.1**：[安装包](artifacts/timeblock-1.2.1.apk)。安装包在本地生成，未发布到远端 Releases。
+一款面向日常安排的 Android 日程应用。用具体时间段、全天事项或跨天日程记录计划，在列表与日历中管理安排，通过周/月统计了解计划分布。
 
-1.2.1 修复：保存与完成日程后的提示自动消失；深浅色模式自动跟随系统。默认开始时间仍按当前时间向上取到最近的 15 分钟，其他日期默认 09:00。
+**无需登录 · 本机保存 · 系统深浅色适配 · Android 8.0 及以上**
 
-1.2.0 功能：今天/明天快捷日期、常用时间一键选择、列表改期与完成撤销；统一桌面与导航图标；独立周/月统计，包含完成率、计划时长、每日安排和分类分布。
+[下载安装](https://github.com/wavachao/mockup/releases/latest) · [版本记录](https://github.com/wavachao/mockup/releases) · [反馈问题](https://github.com/wavachao/mockup/issues)
 
-当前入口为「日程、日历、统计、设置」。下方的初版设计稿仅作历史参考。
+## 功能
 
-![首页](docs/qa-screenshots-1.2.0/agenda.png)
+| 模块 | 能力 |
+| --- | --- |
+| 日程管理 | 新建、编辑、搜索、分类、备注、完成与撤销完成，保留过期未完成事项 |
+| 时间安排 | 起止时间、全天事项、跨天安排，快捷日期与常用时间选择 |
+| 日历视图 | 月历与周历切换，按日期查看、新建和调整日程 |
+| 日程提醒 | 提前提醒，全天事项可在当天或前一天上午 9 点提醒 |
+| 周/月统计 | 完成率、计划时长、每日安排及分类分布 |
+| 外观与存储 | 自动跟随系统深浅色模式，使用本地数据库保存记录 |
 
+统计中的时长表示**计划时长**，并非实际计时；全天事项不计入小时数，重叠日程分别累计。
 
-本仓库是 `ui/mockup.html` 高保真设计稿的 Android 实现，使用 **Kotlin + Jetpack Compose + Material 3**，
-数据落在 **Room**，提醒走 **AlarmManager 精确闹钟**，可在本机 Android SDK 环境或 **GitHub Actions** 中构建。
+## 界面预览
 
----
+以下截图来自 1.2.0 的浅色界面；1.2.1 在此基础上增加系统主题跟随并修复提示停留问题。
 
-## 1. 初版设计稿对照（历史）
+<p align="center">
+  <img src="docs/qa-screenshots-1.2.0/agenda.png" width="240" alt="日程列表">
+  <img src="docs/qa-screenshots-1.2.0/calendar.png" width="240" alt="日历视图">
+  <img src="docs/qa-screenshots-1.2.0/statistics.png" width="240" alt="日程统计">
+</p>
 
-| 设计稿 | 屏幕 | 实现文件 |
-| --- | --- | --- |
-| ① 今天 · 时间轴主视图 | `TodayScreen` | `app/src/main/java/com/wavachao/timeblock/ui/screens/TodayScreen.kt` |
-| ① 快速添加 sheet | `QuickAddSheet` | `app/src/main/java/com/wavachao/timeblock/ui/components/QuickAddSheet.kt` |
-| ② 新建 / 编辑 · 滚轮选时 | `BlockEditorScreen` | `app/src/main/java/com/wavachao/timeblock/ui/screens/EditorScreen.kt` |
-| ③ 日历 · 月视图 + 负荷标记 | `CalendarScreen` | `app/src/main/java/com/wavachao/timeblock/ui/screens/CalendarScreen.kt` |
-| ④ 回顾 · 时长统计与连续打卡 | `InsightsScreen` | `app/src/main/java/com/wavachao/timeblock/ui/screens/InsightsScreen.kt` |
-| ⑤ 详情 · 进度与子任务 | `BlockDetailScreen` | `app/src/main/java/com/wavachao/timeblock/ui/screens/BlockDetailScreen.kt` |
+## 下载与使用
 
-设计稿按 `390×844` 逻辑像素绘制，因此 **1 CSS px = 1 dp**，颜色直接一一映射为 `Color(0xFF…)`。
-设计令牌集中在两个文件里，改主题只需要改它们：
+1. 打开 [GitHub Releases](https://github.com/wavachao/mockup/releases)，选择所需版本。
+2. 在该版本的 **Assets** 中下载 `timeblock-v<版本号>.apk`，在 Android 设备上安装。
+3. 点击「新建日程」，填写名称和日期时间；需要提醒时，允许应用发送通知。
 
-- `ui/theme/Tokens.kt` — 调色板、品牌渐变、圆角、时间轴度量（96dp/小时）
-- `ui/theme/Type.kt` — 字阶（标题 800 / 正文 650 / 弱文 600）
+当前源码版本为 **1.2.1**（`versionCode = 5`）。发布记录以 Releases 页面为准。
 
-### 设计稿里没有的东西
+### 常见行为
 
-- **图标**：设计稿的图标是 1.9px 圆头描边的自定义路径。为了不引入 `material-icons-extended`
-  （为了 5 个图标背几 MB），`ui/icons/BlockIcons.kt` 使用 Compose 的 SVG path 解析器，
-  图标描边只进行一次密度缩放，避免高密度屏幕上粗糙变形。
-- **时间轴几何**：`ui/util/TimelineLayout.kt` 负责所有"某个时刻落在第几个像素"的计算，
-  包括重叠时间段的列分配（设计稿里没有重叠，但真实排程一定会有）。
+- **默认开始时间**：当天日程按当前时间向上取到最近的 15 分钟，例如 10:38 → 10:45；其他日期默认 09:00。不会沿用上次的开始时间。
+- **记住的选项**：新建日程会沿用上次保存的分类，以及具体时间日程的提醒选项。
+- **操作提示**：「日程已保存」和完成后的「撤销」提示会自动消失，撤销提示保留更长时间供操作。
+- **深色模式**：随系统设置自动切换，无需在应用内单独开启。
+- **提醒权限**：通知需获得系统授权；精确闹钟不可用时会降级为非精确提醒，到达时间可能受系统调度影响。
 
----
+### 数据与安装说明
 
-## 2. 架构
+日程保存在本机 Room 数据库中，无需账号，当前不提供应用内跨设备同步。卸载或清除应用数据可能导致记录丢失；系统备份行为由设备和系统设置决定。
 
-```
-data/                    纯 Kotlin/Kotlinx 域层 + Room 持久层
-  model/                 TimeBlock · TimeBlockDraft · BlockCategory · RecurrenceRule · SubTask
-  local/                 TimeBlockEntity · TimeBlockDao · TimeBlockDatabase · SubTaskCodec
-  TimeBlockRepository    接口（屏幕永远不直接碰 Room）
-  OfflineTimeBlockRepository
-  DayStats / WeekInsight / DayLoad / buildDayLoads / planningStreak
-  Stats.kt
+当前安装包使用调试密钥签名，GitHub 工作流会在每次构建时生成密钥。因此，不同构建之间可能因签名不同而无法直接覆盖安装；本地包与 GitHub 下载包也可能存在这一差异。遇到签名冲突时，不要为安装新版而直接卸载仍有重要记录的旧版。稳定的升级分发需要配置持久化发布签名。
 
-reminder/                AlarmManager 精确闹钟 + 通知 + 开机重建
-  ReminderScheduler · BlockAlarmReceiver · BootCompletedReceiver · ReminderNotifications
+## 开发环境
 
-ui/
-  MainViewModel          单一状态源：TodayUiState / CalendarUiState / InsightsUiState
-  components/            SurfaceCard · Pill · PrimaryButton · MeterBar · TimeBlockIcon 等设计系统组件
-  screens/               日程、日历、统计、设置、新建编辑、详情
-  theme/ icons/ util/
-```
+| 项目 | 要求 / 当前配置 |
+| --- | --- |
+| JDK | 17 |
+| Android SDK | Platform 35 |
+| 最低系统版本 | Android 8.0 / API 26 |
+| 目标系统版本 | Android 15 / API 35 |
+| Gradle | 8.11.1，仓库提供 Wrapper |
+| Android Gradle Plugin | 8.9.2 |
+| Kotlin | 2.0.21 |
+| 界面 | Jetpack Compose、Material 3、Navigation Compose |
+| 数据 | Room 2.6.1、Kotlin Flow |
 
-几个刻意的选择：
+依赖版本集中在 [`gradle/libs.versions.toml`](gradle/libs.versions.toml)。
 
-- **起止时间同时存 epoch millis 和本地墙钟文本**。范围查询走索引列；显示的永远是你当初排的那个钟点，
-  换时区不会把日程悄悄挪走（`TimeBlockEntityTest` 钉住了这一点）。
-- **重复日程在保存时展开** 为未来 28 天的具体行（`PlanHorizon.Default`），
-  否则日历、统计、提醒三处都要各自实现一次"虚拟实例"。
-- **子任务用文本列编码**而不是第二张表：它永远只跟着父块一起读。`SubTaskCodec` 有往返测试。
-- **提醒降级**：`SCHEDULE_EXACT_ALARM` 被用户收回时退化为非精确闹钟，而不是直接不提醒。
+## 本地构建
 
----
+克隆项目后，使用 Android Studio 打开仓库根目录，或配置 JDK 17 与 Android SDK 后使用命令行构建。
 
-## 3. 云端构建（本机无 SDK）
-
-工作流：
-
-- `.github/workflows/ci.yml` — 每次 push 到 `main` / `feat/**` / `fix/**` / `chore/**`、以及所有 PR：
-  跑单元测试、编译 debug + release APK、Lint、上传 APK 产物。Lint 错误会阻止构建。
-- `.github/workflows/release.yml` — push `v*` 标签时构建 APK 并发布到 GitHub Release。
-
-工作流使用 `gradle/actions/setup-gradle` 提供 Gradle 8.11.1，**不依赖仓库里的 wrapper jar**；
-本地已经放了官方 wrapper（`gradlew` / `gradlew.bat` / `gradle/wrapper/gradle-wrapper.jar`），
-装了 JDK 的机器可以直接 `./gradlew`。
-
-### 取 APK
-
-1. 当前本地修复版本：[timeblock-1.2.1.apk](artifacts/timeblock-1.2.1.apk)。远端 Releases 的历史版本不包含本次本地修改；
-2. 或打开 Actions → 最近一次成功的 `CI` 运行 → 页面底部 **Artifacts** 下载 `timeblock-apk-<sha>`
-   （Actions 产物需要登录 GitHub 才能下载）。
-
-release 变体目前用 debug keystore 签名（`app/build.gradle.kts` 里有注释标注），
-目的是让产物能直接安装评估；正式发布前换成自己的 upload key 即可。
-签名与对齐已核验：`apksigner verify` 通过（APK Signature Scheme v2），`zipalign -c 4` 通过。
-
-### 本地构建（可选）
-
-默认走云端，但本仓库也验证过完全本地的构建路径。工具链放在 `.tools/`（已被 git 忽略）：
-
-```
-.tools/jdk/jdk-17.0.20.1+1        Temurin JDK 17
-.tools/sdk                        Android SDK（platform-tools、platforms;android-35、build-tools;35.0.0）
-.tools/gradle-home                Gradle 缓存与 8.11.1 发行版
-.tools/keystore/debug.keystore    本地调试签名
-```
-
-`local.properties`（同样不入库）把构建指向它们：
+在本地创建 `local.properties`，填写实际 SDK 路径；该文件不提交到版本库：
 
 ```properties
-sdk.dir=E\:\\code\\memo\\.tools\\sdk
-debug.keystore=E\:\\code\\memo\\.tools\\keystore\\debug.keystore
+sdk.dir=/absolute/path/to/android-sdk
 ```
 
-然后直接跑，无需任何云端往返：
-
-```powershell
-$env:JAVA_HOME = "E:\code\memo\.tools\jdk\jdk-17.0.20.1+1"
-$env:ANDROID_HOME = "E:\code\memo\.tools\sdk"
-$env:GRADLE_USER_HOME = "E:\code\memo\.tools\gradle-home"
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
-```
-
-> `debug.keystore` 这一项是为无写的 HOME 目录准备的兜底：AGP 默认要在 `~/.android` 生成调试密钥，
-> 在沙箱或只读 HOME 里会以 `AccessDeniedException` 失败。CI 用同样的机制在 `RUNNER_TEMP` 里生成密钥。
-
----
-
-## 4. 测试
-
-纯 JVM 单元测试（无需模拟器），覆盖三块最容易出错的逻辑：
-
-| 测试 | 钉住的行为 |
-| --- | --- |
-| `TimelineLayoutTest` | 时间轴偏移量（`09:00 → 46dp`）、窗口自适应、空档、重叠分列、now 线位置 |
-| `TimeFormatTest` | `09:00 – 10:30`、`1h30m`、`6 小时 20 分`、`还有 20 分钟`、`已完成` 等全部文案 |
-| `TimeBlockTest` | 时长派生、跨天草稿、重叠判定、进度钳制、重复规则、提醒文案 |
-| `StatsTest` | 当日完成率、下一个时间段、周统计与分类占比、日历负荷、连续打卡 |
-| `TimeBlockEntityTest` | Room 往返、子任务编解码、时区漂移防护、坏数据兜底 |
+运行测试、静态检查并生成安装包：
 
 ```bash
-./gradlew :app:testDebugUnitTest      # 或交给 GitHub Actions
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
 ```
 
----
+Windows PowerShell 使用：
 
-## 5. 开发规范
-
-- `main` 只接受经过 CI 的合并，功能开发在 `feat/*` 分支上进行。
-- 提交信息使用 Conventional Commits：`feat:` `fix:` `chore:` `docs:` `test:` `ci:` `refactor:`。
-- 合并到 `main` 使用 `--no-ff`，保留分支拓扑，方便回溯某个功能是整块引入的。
-- 版本以标签发布：`git tag -a v1.0.0 -m "…" && git push origin v1.0.0`。
-
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
 ```
-docs/          # 本文件与设计稿说明
-ui/            # 高保真设计稿（mockup.html + preview.png），作为实现对照基准
-app/           # Android 应用
-.github/       # CI / Release 工作流
+
+构建产物：
+
+| 变体 | 默认输出路径 | 应用 ID |
+| --- | --- | --- |
+| Debug | `app/build/outputs/apk/debug/app-debug.apk` | `com.wavachao.timeblock.debug` |
+| Release | `app/build/outputs/apk/release/app-release.apk` | `com.wavachao.timeblock` |
+
+本地交付包统一复制到 `artifacts/`，例如 `artifacts/timeblock-1.2.1.apk`。APK 与本地工具目录 `.tools/` 均被 Git 忽略，不随源码分发。
+
+如需复用已有调试密钥，可在 `local.properties` 中设置 `debug.keystore=/absolute/path/to/debug.keystore`；当前构建配置使用标准调试密钥的别名和密码。
+
+## 测试与质量检查
+
+- **单元测试**：覆盖日程时间计算、全天与跨天安排、草稿编辑、数据转换、统计边界及时间轴布局。
+- **设备测试**：覆盖日程创建与编辑、完成撤销、通知跳转、数据存储和界面状态恢复，需连接设备或模拟器。
+- **Android Lint**：检查 Android 资源与代码中的静态问题。
+
+```bash
+# 连接 Android 设备或启动模拟器后执行
+./gradlew :app:connectedDebugAndroidTest
 ```
+
+历史验收与截图见 [`docs/quality-1.2.0.md`](docs/quality-1.2.0.md)。这些记录对应标注版本，不代表后续版本已完成全部设备验收。
+
+## 项目结构
+
+```text
+app/
+  schemas/                 Room 数据库版本结构
+  src/main/java/com/wavachao/timeblock/
+    data/                  数据模型、仓库、数据库与统计计算
+    reminder/              闹钟调度、通知与系统事件恢复
+    ui/                    页面、组件、主题与状态管理
+    MainActivity.kt        应用入口与导航
+    TimeBlockApp.kt        应用级依赖初始化
+  src/test/                JVM 单元测试
+  src/androidTest/         Android 设备测试
+.github/workflows/         持续集成与版本发布
+ui/                        初版界面原型，保留作设计参考
+docs/                      历史验收记录与截图
+```
+
+界面通过 `MainViewModel` 与仓库接口访问数据，由 Room 持久化并通过 Flow 更新界面。提醒使用系统 AlarmManager 调度，并在设备重启等事件后重建。
+
+## 持续集成与发布
+
+| 工作流 | 触发方式 | 内容 |
+| --- | --- | --- |
+| [CI](.github/workflows/ci.yml) | 推送到 `main`、`feat/**`、`fix/**`、`chore/**`、`codex/**`，或向 `main` 提交 PR | 单元测试、Debug / Release 构建、Lint 与报告上传 |
+| [Release APK](.github/workflows/release.yml) | 推送 `v*` 标签，或使用已有标签手动触发 | 构建 APK、创建 GitHub Release 并上传安装包 |
+
+CI 的测试与 Lint 步骤当前设置了 `continue-on-error`，工作流成功状态不保证这两项全部通过；合并前需查看对应步骤及报告。Release 工作流只负责打包发布，不重复运行单元测试。
+
+发布流程：
+
+1. 在开发分支完成修改和验证，使用 `feat:`、`fix:`、`docs:` 等提交前缀。
+2. 合并前检查 CI 结果、测试报告和 Lint 报告；使用 `--no-ff` 合并到 `main`。
+3. 应用版本发布前更新 `app/build.gradle.kts` 中的 `versionName`，并递增 `versionCode`。设置页自动读取版本号。
+4. 在对应提交上创建并推送版本标签。例如发布 1.2.1：
+
+   ```bash
+   git tag -a v1.2.1 -m "Release TimeBlock 1.2.1"
+   git push origin v1.2.1
+   ```
+
+5. 确认 Release 工作流成功，且版本页面包含可下载的 APK。已经发布的标签不应重复创建或移动。
+
+## 1.2.1 更新
+
+- 修复新建、完成日程后带操作按钮的提示一直停留的问题。
+- 深浅色主题自动跟随系统，日期选择框与启动背景同步适配。
+- 设置页版本号改为读取构建配置，避免与安装包版本不一致。
+
+## 问题反馈
+
+请在 [Issues](https://github.com/wavachao/mockup/issues) 中提供应用版本、设备型号、Android 版本、复现步骤以及预期与实际表现。界面问题可附截图，并隐藏个人日程内容。
