@@ -28,7 +28,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
@@ -41,7 +46,7 @@ object Routes {
     const val INSIGHTS = "insights"
     const val PROFILE = "profile"
     const val DETAIL = "block/{blockId}"
-    const val ADD = "block/new"
+    const val ADD = "block/new?date={date}"
     const val EDIT = "block/{blockId}/edit"
 
     fun detail(blockId: Long): String = "block/$blockId"
@@ -103,6 +108,34 @@ class MainViewModel(
 
     private val _calendarState = MutableStateFlow(CalendarUiState())
     val calendarState: StateFlow<CalendarUiState> = _calendarState.asStateFlow()
+    val totalCount = repository.observeTotalCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val allBlocks = repository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _message = MutableStateFlow<String?>(null)
+    val message = _message.asStateFlow()
+    private var mutating = false
+
+    fun clearMessage() { _message.value = null }
+
+    private fun mutate(action: suspend () -> Unit) {
+        if (mutating) return
+        mutating = true
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _message.value = "操作未完成，请重试。你的输入已保留。"
+            } finally {
+                mutating = false
+            }
+        }
+    }
+
+    private suspend fun updateReminder(action: suspend () -> Unit) {
+        try { action() } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { _message.value = "日程已保存，但提醒设置失败，请检查系统通知设置。" }
+    }
 
     init {
         observeSelectedDay()
@@ -114,7 +147,9 @@ class MainViewModel(
     /** Screen 1: re-query whenever the selected day changes, refresh on every tick. */
     private fun observeSelectedDay() {
         _todayState
-            .flatMapLatest { state -> repository.observeDay(state.selectedDate) }
+            .map { it.selectedDate }
+            .distinctUntilChanged()
+            .flatMapLatest { date -> repository.observeDay(date) }
             .combine(clock) { blocks, now -> now to blocks }
             .onEach { (now, blocks) ->
                 val date = _todayState.value.selectedDate
@@ -124,7 +159,7 @@ class MainViewModel(
                         today = now.toLocalDate(),
                         now = now,
                         blocks = ordered,
-                        timeline = buildTimeline(ordered),
+                        timeline = buildTimeline(ordered, fitToBlocks = true),
                         stats = DayStats.of(date, ordered, now),
                     )
                 }
@@ -135,11 +170,12 @@ class MainViewModel(
     /** Screen 3: a month of load dots plus the selected day's short list. */
     private fun observeSelectedMonth() {
         _calendarState
-            .flatMapLatest { state ->
+            .map { it.month to it.selectedDate }
+            .distinctUntilChanged()
+            .flatMapLatest { (month, _) ->
                 // The visible grid shows days of the neighbouring months too, so the
                 // query window is padded by a week on both sides: tapping a leading or
                 // trailing cell then has its list ready instead of looking empty.
-                val month = state.month
                 repository.observeRange(
                     month.atDay(1).minusDays(7),
                     month.atEndOfMonth().plusDays(7),
@@ -162,8 +198,9 @@ class MainViewModel(
     /** Screen 4: current week plus the previous one for the delta badge. */
     private fun observeInsightWeek() {
         _insightsState
-            .flatMapLatest { state ->
-                val start = state.weekStart
+            .map { it.weekStart }
+            .distinctUntilChanged()
+            .flatMapLatest { start ->
                 repository.observeRange(start.minusDays(7), start.plusDays(13))
             }
             .onEach { blocks ->
@@ -195,7 +232,12 @@ class MainViewModel(
     private fun tickClock() {
         viewModelScope.launch {
             while (true) {
-                clock.value = LocalDateTime.now()
+                val now = LocalDateTime.now()
+                val previousToday = _todayState.value.today
+                if (now.toLocalDate() != previousToday && _todayState.value.selectedDate == previousToday) {
+                    selectDate(now.toLocalDate())
+                }
+                clock.value = now
                 delay(CLOCK_TICK_MILLIS)
             }
         }
@@ -212,41 +254,58 @@ class MainViewModel(
 
     fun goToToday() = selectDate(LocalDate.now())
 
-    fun toggleDone(block: TimeBlock) {
-        viewModelScope.launch {
+    fun toggleDone(block: TimeBlock) = toggleDone(block) {}
+
+    fun toggleDone(block: TimeBlock, onSaved: () -> Unit) {
+        mutate {
             val target = !block.done
             repository.setDone(block.id, target)
-            if (target) {
+            updateReminder { if (target) {
                 reminderScheduler.cancel(block.id)
             } else {
                 reminderScheduler.schedule(block.copy(done = false))
-            }
+            } }
+            onSaved()
         }
     }
 
+    fun moveBlock(block: TimeBlock, date: LocalDate) {
+        val days = java.time.temporal.ChronoUnit.DAYS.between(block.date, date)
+        val moved = block.copy(start = block.start.plusDays(days), end = block.end.plusDays(days))
+        updateBlock(TimeBlockDraft.from(moved)) { _message.value = "已改期至 $date" }
+    }
+
     fun createBlock(draft: TimeBlockDraft, onSaved: (Long) -> Unit = {}) {
-        viewModelScope.launch {
+        if (draft.validationError != null) { _message.value = draft.validationError; return }
+        mutate {
             val block = draft.toBlock()
             val id = repository.save(block)
-            reminderScheduler.schedule(block.copy(id = id))
+            updateReminder {
+                repository.rangeBlocks(block.date, block.date.plusDays(PlanHorizon.Default.days.toLong()))
+                    .forEach { reminderScheduler.schedule(it) }
+            }
             onSaved(id)
         }
     }
 
     fun updateBlock(draft: TimeBlockDraft, onSaved: (Long) -> Unit = {}) {
-        viewModelScope.launch {
+        if (draft.validationError != null) { _message.value = draft.validationError; return }
+        mutate {
             val block = draft.toBlock()
             repository.save(block, PlanHorizon.None)
-            reminderScheduler.cancel(block.id)
-            reminderScheduler.schedule(block)
+            updateReminder {
+                reminderScheduler.cancel(block.id)
+                reminderScheduler.schedule(block)
+            }
             onSaved(block.id)
         }
     }
 
-    fun deleteBlock(blockId: Long) {
-        viewModelScope.launch {
-            reminderScheduler.cancel(blockId)
+    fun deleteBlock(blockId: Long, onDeleted: () -> Unit = {}) {
+        mutate {
             repository.delete(blockId)
+            updateReminder { reminderScheduler.cancel(blockId) }
+            onDeleted()
         }
     }
 
@@ -258,6 +317,8 @@ class MainViewModel(
     }
 
     suspend fun blockById(blockId: Long): TimeBlock? = repository.blockById(blockId)
+
+    fun observeBlock(blockId: Long) = repository.observeBlock(blockId)
 
     // ---------------------------------------------------------------- screen 3
 
@@ -305,13 +366,16 @@ class MainViewModel(
 
 fun TimeBlockDraft.toBlock(id: Long = this.id): TimeBlock = TimeBlock(
     id = id,
-    title = title.ifBlank { "新时间段" },
+    title = title.trim().ifBlank { "新时间段" },
     start = start,
     end = end,
     category = category,
     notes = notes,
     reminderMinutes = reminderMinutes,
     recurrence = recurrence,
+    done = done,
+    createdAt = createdAt,
+    allDay = allDay,
 )
 
 private fun TimeBlock.toRangeRow(): BlockRange {

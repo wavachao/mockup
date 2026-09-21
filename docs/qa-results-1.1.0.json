@@ -1,0 +1,14 @@
+{
+  "version": "1.1.0",
+  "unit": {
+    "tests": 54,
+    "failures": 0,
+    "errors": 0
+  },
+  "device": {
+    "api": 35,
+    "tests": 14,
+    "failures": 0
+  },
+  "sha256": "BAF6330328CD92EAA83D179DCB15E7AE2F382EBA286C9A21720AF2AF2E3FFD75"
+}

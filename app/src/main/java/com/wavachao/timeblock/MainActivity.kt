@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +28,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
+import com.wavachao.timeblock.ui.screens.AgendaScreen
+import com.wavachao.timeblock.ui.screens.StatisticsScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +38,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.wavachao.timeblock.ui.util.DraftSaver
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +90,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
+    private var notificationBlockId by mutableStateOf(-1L)
 
     private val viewModel: MainViewModel by viewModels {
         val container = (application as TimeBlockApp).container
@@ -82,12 +100,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val initialBlockId = intent?.getLongExtra(EXTRA_BLOCK_ID, -1L) ?: -1L
+        notificationBlockId = intent?.getLongExtra(EXTRA_BLOCK_ID, -1L) ?: -1L
         setContent {
             TimeBlockTheme {
-                TimeBlockRoot(initialBlockId = initialBlockId, viewModel = viewModel)
+                TimeBlockRoot(initialBlockId = notificationBlockId, viewModel = viewModel,
+                    onNotificationHandled = { notificationBlockId = -1L; intent?.removeExtra(EXTRA_BLOCK_ID) })
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationBlockId = intent.getLongExtra(EXTRA_BLOCK_ID, -1L)
     }
 
     companion object {
@@ -98,92 +123,112 @@ class MainActivity : ComponentActivity() {
 private data class TabSpec(val route: String, val label: String, val icon: IconSpec)
 
 private val Tabs = listOf(
-    TabSpec(Routes.TODAY, "今天", BlockIcons.Today),
+    TabSpec(Routes.TODAY, "日程", BlockIcons.Today),
     TabSpec(Routes.CALENDAR, "日历", BlockIcons.Calendar),
-    TabSpec(Routes.INSIGHTS, "回顾", BlockIcons.Insights),
-    TabSpec(Routes.PROFILE, "我的", BlockIcons.Profile),
+    TabSpec(Routes.INSIGHTS, "统计", BlockIcons.Insights),
+    TabSpec(Routes.PROFILE, "设置", BlockIcons.Profile),
 )
 
 @Composable
-private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel) {
+private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel, onNotificationHandled: () -> Unit) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.TODAY
     val isTabRoute = Tabs.any { it.route == currentRoute }
+    val allBlocks by viewModel.allBlocks.collectAsStateWithLifecycle()
+    val todayState by viewModel.todayState.collectAsStateWithLifecycle()
+    val calendarState by viewModel.calendarState.collectAsStateWithLifecycle()
+    val insightsState by viewModel.insightsState.collectAsStateWithLifecycle()
+    val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(message) {
+        message?.let { snackbar.showSnackbar(it); viewModel.clearMessage() }
+    }
 
-    val todayState by viewModel.todayState.collectAsState()
-    val calendarState by viewModel.calendarState.collectAsState()
-    val insightsState by viewModel.insightsState.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var sheetOpen by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(TimeBlockDraft.startingAt(LocalDateTime.now())) }
+    val toggleDone: (TimeBlock) -> Unit = { block ->
+        viewModel.toggleDone(block) {
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                if (snackbar.showSnackbar(if(block.done) "已恢复为待办" else "已完成一项日程", actionLabel = "撤销", duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
+                    viewModel.toggleDone(block.copy(done = !block.done))
+                }
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-    ) { /* reminders simply stay silent if the user declines */ }
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    ) { granted ->
+        if (!granted) scope.launch { snackbar.showSnackbar("日程已保存。开启通知权限后才能收到提醒。") }
+    }
+    val requestReminderPermission: (TimeBlockDraft) -> Unit = { saved ->
+        if (saved.reminderMinutes >= 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
     // A reminder tap opens the block it refers to.
     LaunchedEffect(initialBlockId) {
-        if (initialBlockId > 0L) navController.navigate(Routes.detail(initialBlockId))
+        if (initialBlockId > 0L) {
+            navController.navigate(Routes.detail(initialBlockId)) { launchSingleTop = true }
+            onNotificationHandled()
+        }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        ScreenBackground()
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()),
-        ) {
+    Scaffold(
+        bottomBar = { if(isTabRoute) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            Tabs.forEach { tab -> NavigationBarItem(selected = currentRoute == tab.route,
+                onClick = { navController.navigate(tab.route) { popUpTo(navController.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } },
+                icon = { TimeBlockIcon(icon = tab.icon, size = 24.dp, tint = if(currentRoute == tab.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }, label = { Text(tab.label) }) }
+        } },
+        floatingActionButton = { if(currentRoute == Routes.TODAY || currentRoute == Routes.CALENDAR) ExtendedFloatingActionButton(
+            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(16.dp),
+            onClick = { navController.navigate(Routes.addFor(if(currentRoute == Routes.CALENDAR) calendarState.selectedDate else LocalDate.now())) }) { TimeBlockIcon(BlockIcons.Plus, tint = MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(8.dp)); Text("新建日程") } },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if(isTabRoute) 0.dp else 128.dp)) },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             NavHost(
                 navController = navController,
                 startDestination = Routes.TODAY,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(bottom = if(currentRoute == Routes.TODAY || currentRoute == Routes.CALENDAR) 80.dp else 0.dp),
             ) {
                 composable(Routes.TODAY) {
-                    TodayScreen(
-                        state = todayState,
-                        onToggleDone = viewModel::toggleDone,
-                        onOpenBlock = { id -> navController.navigate(Routes.detail(id)) },
-                        onStepDate = viewModel::stepSelectedDate,
-                        onAddForDate = { date ->
-                            draft = TimeBlockDraft.startingAt(date.atTime(9, 0))
-                            sheetOpen = true
-                        },
-                    )
+                    AgendaScreen(allBlocks, todayState.now, { navController.navigate(Routes.detail(it)) }, toggleDone,
+                        onEdit = { snackbar.currentSnackbarData?.dismiss(); navController.navigate(Routes.edit(it)) }, onMove = { block, day -> viewModel.moveBlock(block, day) })
                 }
 
                 composable(Routes.CALENDAR) {
                     CalendarScreen(
                         state = calendarState,
+                        blocks = allBlocks,
+                        onToggle = toggleDone,
+                        onEdit = { snackbar.currentSnackbarData?.dismiss(); navController.navigate(Routes.edit(it)) },
+                        onMove = { block, day -> viewModel.moveBlock(block, day) },
                         onSelectDate = viewModel::selectCalendarDate,
                         onStepMonth = viewModel::stepMonth,
                         onOpenBlock = { id -> navController.navigate(Routes.detail(id)) },
                         onCreateForDate = { date ->
-                            draft = TimeBlockDraft.startingAt(date.atTime(9, 0))
-                            sheetOpen = true
+                            navController.navigate(Routes.addFor(date))
                         },
                     )
                 }
 
                 composable(Routes.INSIGHTS) {
-                    InsightsScreen(
-                        state = insightsState,
-                        onStepWeek = viewModel::stepWeek,
-                        onCurrentWeek = viewModel::currentWeek,
-                    )
+                    StatisticsScreen(allBlocks, todayState.today)
                 }
 
                 composable(Routes.PROFILE) {
                     ProfileScreen(
-                        totalBlocks = todayState.blocks.size,
-                        selectedDate = todayState.selectedDate,
+                        totalBlocks = totalCount,
+                        selectedDate = todayState.today,
                         onOpenToday = {
+                            viewModel.goToToday()
                             navController.navigate(Routes.TODAY) { launchSingleTop = true }
                         },
                     )
@@ -194,20 +239,18 @@ private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel) {
                     arguments = listOf(navArgument("blockId") { type = NavType.LongType }),
                 ) { entry ->
                     val blockId = entry.arguments?.getLong("blockId") ?: 0L
-                    var block by remember(blockId) { mutableStateOf<TimeBlock?>(null) }
-                    LaunchedEffect(blockId, todayState.blocks) {
-                        block = viewModel.blockById(blockId)
-                    }
+                    val detail by remember(blockId) { viewModel.observeBlock(blockId).map { true to it } }
+                        .collectAsStateWithLifecycle(initialValue = false to null)
                     BlockDetailScreen(
-                        block = block,
+                        block = detail.second,
+                        loading = !detail.first,
                         now = todayState.now,
                         onBack = { navController.popBackStack() },
-                        onEdit = { id -> navController.navigate(Routes.edit(id)) },
+                        onEdit = { id -> snackbar.currentSnackbarData?.dismiss(); navController.navigate(Routes.edit(id)) },
                         onDelete = { id ->
-                            viewModel.deleteBlock(id)
-                            navController.popBackStack()
+                            viewModel.deleteBlock(id) { navController.popBackStack() }
                         },
-                        onToggleDone = { viewModel.toggleDone(it) },
+                        onToggleDone = toggleDone,
                     )
                 }
 
@@ -225,9 +268,19 @@ private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel) {
                         ?: LocalDate.now()
                     BlockEditorScreen(
                         initial = null,
+                        initialDraft = null,
                         dateHint = date,
                         onSave = { created ->
-                            viewModel.createBlock(created) { navController.popBackStack() }
+                            viewModel.createBlock(created) { id ->
+                                navController.popBackStack()
+                                scope.launch {
+                                    snackbar.currentSnackbarData?.dismiss()
+                                    if (snackbar.showSnackbar("日程已保存", actionLabel = "查看", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+                                        navController.navigate(Routes.detail(id))
+                                    }
+                                }
+                                requestReminderPermission(created)
+                            }
                         },
                         onDelete = {},
                         onBack = { navController.popBackStack() },
@@ -247,11 +300,15 @@ private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel) {
                             initial = loaded,
                             dateHint = loaded.date,
                             onSave = { edited ->
-                                viewModel.updateBlock(edited) { navController.popBackStack() }
+                                viewModel.updateBlock(edited) {
+                                    navController.popBackStack()
+                                    requestReminderPermission(edited)
+                                }
                             },
                             onDelete = { id ->
-                                viewModel.deleteBlock(id)
-                                navController.popBackStack()
+                                viewModel.deleteBlock(id) {
+                                    navController.popBackStack(Routes.TODAY, inclusive = false)
+                                }
                             },
                             onBack = { navController.popBackStack() },
                         )
@@ -260,109 +317,5 @@ private fun TimeBlockRoot(initialBlockId: Long, viewModel: MainViewModel) {
             }
         }
 
-        if (currentRoute == Routes.TODAY) {
-            QuickAddFab(
-                onClick = {
-                    draft = TimeBlockDraft.startingAt(todayState.now)
-                    sheetOpen = true
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 22.dp, bottom = 104.dp),
-            )
-        }
-
-        if (isTabRoute) {
-            BottomTabBar(
-                currentRoute = currentRoute,
-                onSelect = { route ->
-                    navController.navigate(route) {
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
-        }
-
-        QuickAddSheet(
-            visible = sheetOpen,
-            dates = (0..3).map { todayState.today.plusDays(it.toLong()) },
-            draft = draft,
-            onDraftChange = { draft = it },
-            onSubmit = {
-                viewModel.createBlock(draft)
-                sheetOpen = false
-            },
-            onExpand = {
-                sheetOpen = false
-                navController.navigate(Routes.addFor(draft.date))
-            },
-            onDismiss = { sheetOpen = false },
-        )
-    }
-}
-
-/** The 88dp tab bar from the mockup, rebuilt with the same glass + pill treatment. */
-@Composable
-private fun BottomTabBar(
-    currentRoute: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val palette = AppTokens.palette
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, palette.background.copy(alpha = 0.92f)),
-                ),
-            )
-            .padding(top = 12.dp, bottom = 18.dp),
-    ) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.hairline))
-        Spacer(Modifier.height(6.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Tabs.forEach { tab ->
-                val selected = currentRoute == tab.route
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(Radius.chip))
-                        .clickable { onSelect(tab.route) }
-                        .padding(vertical = 9.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (selected) {
-                            Box(
-                                Modifier
-                                    .width(46.dp)
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(Radius.chip))
-                                    .background(BrandColors.brandGradientSoft)
-                                    .border(1.dp, Color(0x528C7CFF), RoundedCornerShape(Radius.chip)),
-                            )
-                        }
-                        TimeBlockIcon(
-                            icon = tab.icon,
-                            size = 21.dp,
-                            tint = if (selected) Color(0xFFA99CFF) else palette.muted,
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = tab.label,
-                        color = if (selected) palette.text else palette.muted,
-                        style = AppTokens.type.micro.copy(fontSize = 10.5.sp, fontWeight = FontWeight(600)),
-                    )
-                }
-            }
-        }
     }
 }

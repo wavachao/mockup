@@ -1,13 +1,24 @@
 # TimeBlock · 时间段待办
 
-把一天切成看得见的时间段。核心交互只有一个：**给事情指定一个开始与结束时间**。
+记录未来的日程安排：支持具体起止时间、全天事项及跨天安排，按日期查看、搜索、改期和完成。
+
+当前工作区版本 **1.2.1**：[安装包](artifacts/timeblock-1.2.1.apk)。安装包在本地生成，未发布到远端 Releases。
+
+1.2.1 修复：保存与完成日程后的提示自动消失；深浅色模式自动跟随系统。默认开始时间仍按当前时间向上取到最近的 15 分钟，其他日期默认 09:00。
+
+1.2.0 功能：今天/明天快捷日期、常用时间一键选择、列表改期与完成撤销；统一桌面与导航图标；独立周/月统计，包含完成率、计划时长、每日安排和分类分布。
+
+当前入口为「日程、日历、统计、设置」。下方的初版设计稿仅作历史参考。
+
+![首页](docs/qa-screenshots-1.2.0/agenda.png)
+
 
 本仓库是 `ui/mockup.html` 高保真设计稿的 Android 实现，使用 **Kotlin + Jetpack Compose + Material 3**，
-数据落在 **Room**，提醒走 **AlarmManager 精确闹钟**，全部编译在 **GitHub Actions** 云端完成（本机不需要 Android SDK）。
+数据落在 **Room**，提醒走 **AlarmManager 精确闹钟**，可在本机 Android SDK 环境或 **GitHub Actions** 中构建。
 
 ---
 
-## 1. 设计稿对照
+## 1. 初版设计稿对照（历史）
 
 | 设计稿 | 屏幕 | 实现文件 |
 | --- | --- | --- |
@@ -21,14 +32,14 @@
 设计稿按 `390×844` 逻辑像素绘制，因此 **1 CSS px = 1 dp**，颜色直接一一映射为 `Color(0xFF…)`。
 设计令牌集中在两个文件里，改主题只需要改它们：
 
-- `ui/theme/Tokens.kt` — 调色板、品牌渐变、圆角、时间轴度量（46dp/小时）
+- `ui/theme/Tokens.kt` — 调色板、品牌渐变、圆角、时间轴度量（96dp/小时）
 - `ui/theme/Type.kt` — 字阶（标题 800 / 正文 650 / 弱文 600）
 
 ### 设计稿里没有的东西
 
 - **图标**：设计稿的图标是 1.9px 圆头描边的自定义路径。为了不引入 `material-icons-extended`
-  （为了 5 个图标背几 MB），`ui/icons/BlockIcons.kt` 内置了一个极小的 SVG path 解析器，
-  把设计稿里的路径数据原样渲染成 Canvas 描边。
+  （为了 5 个图标背几 MB），`ui/icons/BlockIcons.kt` 使用 Compose 的 SVG path 解析器，
+  图标描边只进行一次密度缩放，避免高密度屏幕上粗糙变形。
 - **时间轴几何**：`ui/util/TimelineLayout.kt` 负责所有"某个时刻落在第几个像素"的计算，
   包括重叠时间段的列分配（设计稿里没有重叠，但真实排程一定会有）。
 
@@ -51,7 +62,7 @@ reminder/                AlarmManager 精确闹钟 + 通知 + 开机重建
 ui/
   MainViewModel          单一状态源：TodayUiState / CalendarUiState / InsightsUiState
   components/            SurfaceCard · Pill · PrimaryButton · MeterBar · TimeBlockIcon 等设计系统组件
-  screens/               五个屏幕
+  screens/               日程、日历、统计、设置、新建编辑、详情
   theme/ icons/ util/
 ```
 
@@ -71,7 +82,7 @@ ui/
 工作流：
 
 - `.github/workflows/ci.yml` — 每次 push 到 `main` / `feat/**` / `fix/**` / `chore/**`、以及所有 PR：
-  跑单元测试、编译 debug + release APK、Lint、上传 APK 产物。
+  跑单元测试、编译 debug + release APK、Lint、上传 APK 产物。Lint 错误会阻止构建。
 - `.github/workflows/release.yml` — push `v*` 标签时构建 APK 并发布到 GitHub Release。
 
 工作流使用 `gradle/actions/setup-gradle` 提供 Gradle 8.11.1，**不依赖仓库里的 wrapper jar**；
@@ -80,7 +91,7 @@ ui/
 
 ### 取 APK
 
-1. **推荐**：打开 [Releases](https://github.com/wavachao/mockup/releases) 下载 `timeblock-v1.0.0.apk`（公开直链，不需要登录）；
+1. 当前本地修复版本：[timeblock-1.2.1.apk](artifacts/timeblock-1.2.1.apk)。远端 Releases 的历史版本不包含本次本地修改；
 2. 或打开 Actions → 最近一次成功的 `CI` 运行 → 页面底部 **Artifacts** 下载 `timeblock-apk-<sha>`
    （Actions 产物需要登录 GitHub 才能下载）。
 

@@ -1,0 +1,76 @@
+{
+  "date": "2026-09-19",
+  "version": "1.0.1",
+  "device": "Android 15 API 35 x86_64 emulator",
+  "unit": {
+    "tests": 50,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "device_tests": {
+    "tests": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 48
+  },
+  "apk": {
+    "path": "artifacts\\timeblock-1.0.1.apk",
+    "size_bytes": 7317410,
+    "sha256": "4abb35651d988b13d8ce50133dc3bcb04443a6d6a8a2ac99f90dc9f67bf0ccd0"
+  },
+  "device_cases": [
+    {
+      "class": "com.wavachao.timeblock.AppFlowTest",
+      "name": "warmNotificationOpensDetailAndCompletionUpdatesImmediately"
+    },
+    {
+      "class": "com.wavachao.timeblock.AppFlowTest",
+      "name": "quickAddBackDismissesSheetAndKeepsActivity"
+    },
+    {
+      "class": "com.wavachao.timeblock.AppFlowTest",
+      "name": "selectedDateAndTitleSurviveExpansionAndSave"
+    },
+    {
+      "class": "com.wavachao.timeblock.EditorFlowTest",
+      "name": "deleteRequiresExplicitConfirmationAndCanBeCancelled"
+    },
+    {
+      "class": "com.wavachao.timeblock.EditorFlowTest",
+      "name": "changingBothWheelsKeepsDurationAndLatestHour"
+    },
+    {
+      "class": "com.wavachao.timeblock.EditorFlowTest",
+      "name": "titleAndNotesSurviveActivityRecreation"
+    },
+    {
+      "class": "com.wavachao.timeblock.EditorFlowTest",
+      "name": "initialTimeDoesNotMoveAndExpandedDraftIsPreserved"
+    },
+    {
+      "class": "com.wavachao.timeblock.EditorFlowTest",
+      "name": "blankTitleCannotBeSaved"
+    },
+    {
+      "class": "com.wavachao.timeblock.RepositoryDeviceTest",
+      "name": "roomCreateCompleteEditObserveDelete"
+    },
+    {
+      "class": "com.wavachao.timeblock.RepositoryDeviceTest",
+      "name": "recurrenceUsesSelectedFutureDateAsHorizon"
+    },
+    {
+      "class": "com.wavachao.timeblock.TimelineDeviceTest",
+      "name": "bellArcUsesValidViewportGeometry"
+    },
+    {
+      "class": "com.wavachao.timeblock.TimelineDeviceTest",
+      "name": "overlappingCardsOccupySeparateColumnsInsideScreen"
+    }
+  ]
+}

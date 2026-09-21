@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 /**
@@ -28,8 +29,8 @@ class AppContainer(context: Context) {
 
     val reminderScheduler: ReminderScheduler = AndroidReminderScheduler(context) {
         val today = LocalDate.now()
-        repository.rangeBlocks(today, today.plusDays(PlanHorizon.Default.days.toLong()))
-            .filter { it.reminderMinutes > 0 && !it.done }
+        repository.observeAll().first()
+            .filter { it.reminderMinutes >= 0 && !it.done }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

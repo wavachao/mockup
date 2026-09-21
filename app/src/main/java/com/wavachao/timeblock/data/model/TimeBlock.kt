@@ -20,6 +20,7 @@ data class TimeBlock(
     val reminderMinutes: Int = 10,
     val recurrence: RecurrenceRule = RecurrenceRule.NONE,
     val createdAt: Long = System.currentTimeMillis(),
+    val allDay: Boolean = false,
 ) {
     val duration: Duration get() = Duration.between(start, end)
     val durationMinutes: Int get() = duration.toMinutes().toInt()

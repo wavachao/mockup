@@ -1,614 +1,180 @@
 package com.wavachao.timeblock.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.app.DatePickerDialog
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.wavachao.timeblock.data.model.RecurrenceRule
-import com.wavachao.timeblock.data.model.ReminderLead
-import com.wavachao.timeblock.data.model.TimeBlock
-import com.wavachao.timeblock.data.model.TimeBlockDraft
-import com.wavachao.timeblock.ui.components.CategorySwatches
-import com.wavachao.timeblock.ui.components.FieldLabel
-import com.wavachao.timeblock.ui.components.PrimaryButton
-import com.wavachao.timeblock.ui.components.SectionTitle
-import com.wavachao.timeblock.ui.components.SelectableChip
-import com.wavachao.timeblock.ui.components.SurfaceCard
-import com.wavachao.timeblock.ui.icons.BlockIcons
-import com.wavachao.timeblock.ui.icons.IconSpec
-import com.wavachao.timeblock.ui.icons.TimeBlockIcon
-import com.wavachao.timeblock.ui.theme.AppTokens
-import com.wavachao.timeblock.ui.theme.BrandColors
-import com.wavachao.timeblock.ui.theme.Radius
-import com.wavachao.timeblock.ui.util.TimeFormat
-import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.LocalDateTime
+import com.wavachao.timeblock.data.model.*
+import com.wavachao.timeblock.ui.icons.*
+import com.wavachao.timeblock.ui.util.DraftSaver
+import java.time.*
+import java.time.format.DateTimeFormatter
 
-private val DurationChoices = listOf(15, 30, 45, 60, 90, 120)
-
-/** Reminder lead times offered by the picker, in minutes (0 = at start, -1 = off). */
-private val ReminderOptions = listOf(-1, 0, 5, 10, 30, 60)
-
-private fun reminderLabel(minutes: Int): String =
-    if (minutes < 0) "不提醒" else ReminderLead.label(minutes)
-
-private fun reminderIndex(minutes: Int): Int =
-    ReminderOptions.indexOf(minutes).takeIf { it >= 0 } ?: ReminderOptions.indexOf(10)
-
-/**
- * Screen 2 · 新建 / 编辑.
- *
- * The two scroll wheels are the centrepiece: they edit the start `LocalTime` directly and
- * the end time plus the duration readout are always derived from it, so the three values
- * can never disagree.
- */
 @Composable
-fun BlockEditorScreen(
-    initial: TimeBlock?,
-    dateHint: LocalDate,
-    onSave: (TimeBlockDraft) -> Unit,
-    onDelete: (Long) -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    now: LocalDateTime = LocalDateTime.now(),
-) {
-    var draft by remember(initial?.id, dateHint) {
-        mutableStateOf(
-            initial?.let { TimeBlockDraft.from(it) }
-                ?: TimeBlockDraft.startingAt(dateHint.atTime(defaultStartTime(now)), minutes = 60),
-        )
+private fun EditorCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),content=content)
     }
-    var showReminderSheet by remember { mutableStateOf(false) }
-    var showRecurrenceSheet by remember { mutableStateOf(false) }
+}
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        EditorNavBar(
-            isNew = initial == null,
-            onBack = onBack,
-            onSave = { onSave(draft) },
-        )
-        TitleInput(
-            value = draft.title,
-            onValueChange = { draft = draft.copy(title = it) },
-        )
-        TimeModule(draft = draft, onChange = { draft = it })
-        SettingsList(
-            draft = draft,
-            onChange = { draft = it },
-            onPickReminder = { showReminderSheet = true },
-            onPickRecurrence = { showRecurrenceSheet = true },
-        )
-        SeamHint(draft = draft)
-
-        if (initial != null) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp, vertical = 10.dp)
-                    .clip(RoundedCornerShape(Radius.inner))
-                    .border(1.dp, AppTokens.palette.stroke, RoundedCornerShape(Radius.inner))
-                    .clickable { onDelete(initial.id) }
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "删除这个时间段",
-                    color = AppTokens.palette.danger,
-                    style = AppTokens.type.bodyStrong.copy(fontSize = 13.5.sp),
-                )
+@Composable
+fun BlockEditorScreen(initial: TimeBlock?, dateHint: LocalDate, onSave: (TimeBlockDraft) -> Unit,
+    onDelete: (Long) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier,
+    now: LocalDateTime = LocalDateTime.now(), initialDraft: TimeBlockDraft? = null) {
+    val context=LocalContext.current
+    val preferences=remember { context.getSharedPreferences("editor_preferences",0) }
+    val original=rememberSaveable(initial?.id,saver=DraftSaver) {
+        val d=initial?.let(TimeBlockDraft::from) ?: initialDraft ?: TimeBlockDraft.startingAt(if(dateHint==now.toLocalDate()) now else dateHint.atTime(9,0)).copy(
+            reminderMinutes=preferences.getInt("reminder",-1), category=BlockCategory.fromStorage(preferences.getString("category",null)))
+        if(d.endDate==null) d.copy(endDate=if(d.allDay) d.date else d.end.toLocalDate()) else d
+    }
+    var draft by rememberSaveable(stateSaver=DraftSaver) { mutableStateOf(original) }
+    var moreDates by rememberSaveable { mutableStateOf(original.endDate!=original.date) }
+    var discard by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var editingTime by remember { mutableStateOf<Boolean?>(null) }
+    var attempted by remember { mutableStateOf(false) }
+    val back={if(draft!=original) discard=true else onBack()}
+    BackHandler { back() }
+    fun save() {
+        attempted=true
+        if(draft.validationError==null) {
+            preferences.edit().putString("category",draft.category.name).apply()
+            if(!draft.allDay) preferences.edit().putInt("reminder",draft.reminderMinutes).apply()
+            onSave(draft)
+        }
+    }
+    fun startDate(day: LocalDate) {
+        draft=if(draft.allDay) draft.copy(date=day,endDate=day.plusDays(java.time.temporal.ChronoUnit.DAYS.between(draft.date,draft.endDate?:draft.date).coerceAtLeast(0))) else draft.withStart(day)
+    }
+    fun pickDate(start: Boolean) {
+        val d=if(start) draft.date else draft.endDate?:draft.date
+        DatePickerDialog(context,{_,y,m,day -> val chosen=LocalDate.of(y,m+1,day); if(start) startDate(chosen) else draft=draft.copy(endDate=chosen)},d.year,d.monthValue-1,d.dayOfMonth).show()
+    }
+    fun chooseTime(start: Boolean,time: LocalTime) {
+        draft=if(start) draft.withStartTime(time) else draft.copy(endTime=time)
+        editingTime=null
+    }
+    Column(modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+            GlyphButton(BlockIcons.ChevronLeft,"返回",back)
+            Text(if(initial==null) "新建日程" else "编辑日程",Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+            if(initial!=null) TextButton({deleting=true}) { Text("删除",color=MaterialTheme.colorScheme.error) }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+            OutlinedTextField(draft.title,{draft=draft.copy(title=it)},label={Text("日程名称")},placeholder={Text("要做什么？")},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),singleLine=true,keyboardOptions=KeyboardOptions(imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={save()}))
+            EditorCard {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    TimeBlockIcon(BlockIcons.Calendar,tint=MaterialTheme.colorScheme.primary)
+                    TextButton({pickDate(true)},Modifier.weight(1f).semantics { contentDescription="开始日期" }) { Text(friendlyDay(draft.date)) }
+                    TimeBlockIcon(BlockIcons.ChevronDown,tint=MaterialTheme.colorScheme.onSurfaceVariant,size=16.dp)
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    listOf("今天" to now.toLocalDate(),"明天" to now.toLocalDate().plusDays(1),"一周后" to now.toLocalDate().plusWeeks(1)).forEach { (label,day) ->
+                        FilterChip(draft.date==day,{startDate(day)},label={Text(label)},shape=RoundedCornerShape(10.dp))
+                    }
+                }
+                HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth().toggleable(draft.allDay,onValueChange={ enabled ->
+                    draft=draft.copy(allDay=enabled,reminderMinutes=-1)
+                    if(!enabled && !draft.end.isAfter(draft.start)) draft=draft.withDuration(60)
+                }),verticalAlignment=Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text("全天事项",style=MaterialTheme.typography.titleMedium); Text("只记日期",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Switch(draft.allDay,onCheckedChange=null)
+                }
+                if(!draft.allDay) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                        listOf(true,false).forEach { start ->
+                            Surface(modifier=Modifier.weight(1f).clickable {editingTime=start}.semantics {contentDescription=if(start) "开始时间" else "结束时间"},shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surfaceVariant) {
+                                Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                    Text(if(start) "开始" else "结束",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text((if(start) draft.startTime else draft.endTime).format(DateTimeFormatter.ofPattern("HH:mm")),style=MaterialTheme.typography.headlineMedium)
+                                }
+                            }
+                        }
+                    }
+                    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        listOf(30,60,120).forEach { minutes -> FilterChip(draft.durationMinutes==minutes,{draft=draft.withDuration(minutes)},label={Text(if(minutes==30) "30分" else "${minutes/60}小时")},shape=RoundedCornerShape(10.dp)) }
+                    }
+                }
+                if(moreDates || draft.endDate!=draft.date) TextButton({pickDate(false)},Modifier.fillMaxWidth()) { Text("结束日期  ${draft.endDate}${if(draft.allDay) "（含当天）" else ""}") }
+                else TextButton({moreDates=true},contentPadding=PaddingValues(0.dp)) { Text(if(draft.allDay) "＋ 连续多天" else "＋ 跨天安排",style=MaterialTheme.typography.labelMedium) }
             }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        PrimaryButton(
-            label = if (initial == null) "加入今天" else "保存修改",
-            icon = if (initial == null) BlockIcons.Plus else BlockIcons.Check,
-            onClick = { onSave(draft) },
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-        )
-        Spacer(Modifier.height(40.dp))
-    }
-
-    if (showReminderSheet) {
-        OptionSheet(
-            title = "提醒",
-            options = ReminderOptions.map { reminderLabel(it) },
-            selectedIndex = reminderIndex(draft.reminderMinutes),
-            onDismiss = { showReminderSheet = false },
-            onSelect = { index ->
-                draft = draft.copy(reminderMinutes = ReminderOptions[index])
-                showReminderSheet = false
-            },
-        )
-    }
-    if (showRecurrenceSheet) {
-        OptionSheet(
-            title = "重复",
-            options = RecurrenceRule.entries.map { it.displayName },
-            selectedIndex = RecurrenceRule.entries.indexOf(draft.recurrence),
-            onDismiss = { showRecurrenceSheet = false },
-            onSelect = { index ->
-                draft = draft.copy(recurrence = RecurrenceRule.entries[index])
-                showRecurrenceSheet = false
-            },
-        )
-    }
-}
-
-private fun defaultStartTime(now: LocalDateTime): java.time.LocalTime {
-    val rounded = now.withSecond(0).withNano(0)
-    val add = (15 - rounded.minute % 15) % 15
-    return rounded.plusMinutes(add.toLong()).toLocalTime()
-}
-
-@Composable
-private fun EditorNavBar(isNew: Boolean, onBack: () -> Unit, onSave: () -> Unit) {
-    val palette = AppTokens.palette
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = 20.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(palette.panel)
-                .border(1.dp, palette.stroke, CircleShape)
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center,
-        ) {
-            TimeBlockIcon(BlockIcons.Close, size = 17.dp, tint = palette.textSecondary, strokeWidth = 2.1f)
-        }
-        Text(
-            text = if (isNew) "新建时间段" else "编辑时间段",
-            color = palette.text,
-            style = AppTokens.type.screenTitle,
-        )
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(Radius.pill))
-                .background(BrandColors.brandGradientSoft)
-                .border(1.dp, Color(0x668C7CFF), RoundedCornerShape(Radius.pill))
-                .clickable(onClick = onSave)
-                .padding(horizontal = 15.dp, vertical = 8.dp),
-        ) {
-            Text(
-                text = "保存",
-                color = BrandColors.accent(AppTokens.isDark),
-                style = AppTokens.type.caption.copy(fontWeight = FontWeight(700)),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TitleInput(value: String, onValueChange: (String) -> Unit) {
-    val palette = AppTokens.palette
-    val titleStyle = AppTokens.type.hero.copy(fontSize = 25.sp, lineHeight = 32.sp, color = palette.text)
-    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 6.dp)) {
-        FieldLabel("标题")
-        Spacer(Modifier.height(6.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = titleStyle,
-            cursorBrush = SolidColor(BrandColors.Secondary),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Sentences,
-                imeAction = ImeAction.Done,
-            ),
-            decorationBox = { inner ->
+            EditorCard {
+                var categories by remember {mutableStateOf(false)}
+                var reminders by remember {mutableStateOf(false)}
                 Box {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = "给这段时间起个名字…",
-                            color = palette.mutedDim,
-                            style = titleStyle.copy(fontWeight = FontWeight(500)),
-                        )
+                    Row(Modifier.fillMaxWidth().clickable {categories=true}.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                        TimeBlockIcon(draft.category.icon,tint=draft.category.color)
+                        Text("分类",Modifier.weight(1f).padding(start=12.dp),style=MaterialTheme.typography.bodyMedium)
+                        Text(draft.category.displayName,color=MaterialTheme.colorScheme.primary)
+                        TimeBlockIcon(BlockIcons.ChevronDown,tint=MaterialTheme.colorScheme.onSurfaceVariant,size=18.dp)
                     }
-                    inner()
+                    DropdownMenu(categories,{categories=false}) {BlockCategory.entries.forEach { c -> DropdownMenuItem(text={Text(c.displayName)},onClick={draft=draft.copy(category=c);categories=false})}}
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        Box(
-            Modifier
-                .width(64.dp)
-                .height(1.5.dp)
-                .background(BrandColors.brandGradient),
-        )
-    }
-}
-
-@Composable
-private fun TimeModule(draft: TimeBlockDraft, onChange: (TimeBlockDraft) -> Unit) {
-    val palette = AppTokens.palette
-    SurfaceCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 22.dp, vertical = 14.dp),
-        contentPadding = 16.dp,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TimeBlockIcon(BlockIcons.Clock, size = 13.dp, tint = palette.muted)
-            Spacer(Modifier.width(7.dp))
-            FieldLabel("开始时间")
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TimeWheel(
-                value = draft.startTime.hour,
-                range = 0..23,
-                onValueChange = { hour -> onChange(draft.copy(startTime = draft.startTime.withHour(hour))) },
-            )
-            Text(
-                ":",
-                color = palette.muted,
-                style = AppTokens.type.clock,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
-            TimeWheel(
-                value = draft.startTime.minute,
-                range = 0..59,
-                onValueChange = { minute -> onChange(draft.copy(startTime = draft.startTime.withMinute(minute))) },
-            )
-            Spacer(Modifier.width(18.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                FieldLabel("时长")
-                Text(
-                    text = TimeFormat.compactDuration(draft.durationMinutes),
-                    color = BrandColors.accent(AppTokens.isDark),
-                    style = AppTokens.type.body.copy(fontSize = 13.5.sp, fontWeight = FontWeight(750)),
-                )
-                FieldLabel("结束")
-                Text(
-                    text = TimeFormat.time(draft.endTime),
-                    color = palette.text,
-                    style = AppTokens.type.body.copy(fontSize = 13.5.sp, fontWeight = FontWeight(750)),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.hairline))
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DurationChoices.forEach { minutes ->
-                SelectableChip(
-                    label = if (minutes % 60 == 0) "${minutes / 60}h" else "${minutes}m",
-                    selected = draft.durationMinutes == minutes,
-                    onClick = { onChange(draft.withDuration(minutes)) },
-                    modifier = Modifier.weight(1f),
-                    height = 36.dp,
-                )
-            }
-        }
-    }
-}
-
-/**
- * A one-column scroll wheel. The selected row is the one crossing the highlight band, so
- * the component reports `firstVisibleItemIndex + 1` while snapping in single-row steps.
- */
-@Composable
-private fun TimeWheel(
-    value: Int,
-    range: IntRange,
-    onValueChange: (Int) -> Unit,
-) {
-    val palette = AppTokens.palette
-    val items = remember(range) { range.toList() }
-    val initialIndex = remember(range) { items.indexOf(value).coerceAtLeast(0) }
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
-    val scope = rememberCoroutineScope()
-
-    val centeredIndex by remember {
-        derivedStateOf {
-            (listState.firstVisibleItemIndex + 1).coerceIn(items.first(), items.last())
-        }
-    }
-
-    LaunchedEffect(listState) {
-        snapshotFlow { centeredIndex }.collect { index ->
-            if (index != value) onValueChange(index)
-        }
-    }
-
-    Box(
-        Modifier.size(width = 84.dp, height = 88.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(BrandColors.brandGradientSoft)
-                .border(1.dp, Color(0x4D8C7CFF), RoundedCornerShape(14.dp)),
-        )
-        LazyColumn(
-            state = listState,
-            flingBehavior = rememberSnapFlingBehavior(listState),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item { Spacer(Modifier.height(22.dp)) }
-            items(count = items.size) { index ->
-                val isSelected = items[index] == value
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .clickable {
-                            scope.launch { listState.animateScrollToItem((index - 1).coerceAtLeast(0)) }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = items[index].toString().padStart(2, '0'),
-                        color = if (isSelected) palette.text else palette.mutedDim,
-                        style = if (isSelected) AppTokens.type.wheelFocused else AppTokens.type.wheel,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(22.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun SettingsList(
-    draft: TimeBlockDraft,
-    onChange: (TimeBlockDraft) -> Unit,
-    onPickReminder: () -> Unit,
-    onPickRecurrence: () -> Unit,
-) {
-    SurfaceCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 22.dp),
-    ) {
-        SettingRow(
-            icon = BlockIcons.Briefcase,
-            label = "分类",
-            trailing = {
-                CategorySwatches(
-                    selected = draft.category,
-                    onSelect = { onChange(draft.copy(category = it)) },
-                )
-            },
-        )
-        SettingRow(
-            icon = BlockIcons.Bell,
-            label = "提醒",
-            value = reminderLabel(draft.reminderMinutes),
-            showChevron = true,
-            onClick = onPickReminder,
-        )
-        SettingRow(
-            icon = BlockIcons.Repeat,
-            label = "重复",
-            value = draft.recurrence.displayName,
-            showChevron = true,
-            onClick = onPickRecurrence,
-        )
-        SettingRow(
-            icon = BlockIcons.Notes,
-            label = "备注",
-            value = draft.notes?.takeIf { it.isNotBlank() } ?: "可选",
-            showChevron = true,
-            onClick = { onChange(draft.copy(notes = draft.notes ?: "")) },
-            showDivider = false,
-        )
-    }
-}
-
-@Composable
-private fun SettingRow(
-    icon: IconSpec,
-    label: String,
-    value: String? = null,
-    showChevron: Boolean = false,
-    onClick: (() -> Unit)? = null,
-    showDivider: Boolean = true,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val palette = AppTokens.palette
-    Column {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(horizontal = 18.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(palette.panelStrongest),
-                contentAlignment = Alignment.Center,
-            ) {
-                TimeBlockIcon(icon = icon, size = 16.dp, tint = palette.textSecondary)
-            }
-            Spacer(Modifier.width(14.dp))
-            Text(
-                text = label,
-                color = palette.text,
-                style = AppTokens.type.body,
-                modifier = Modifier.weight(1f),
-            )
-            if (trailing != null) {
-                trailing()
-            } else if (value != null) {
-                Text(
-                    text = value,
-                    color = palette.muted,
-                    style = AppTokens.type.caption.copy(fontSize = 12.5.sp),
-                )
-                if (showChevron) {
-                    Spacer(Modifier.width(7.dp))
-                    TimeBlockIcon(
-                        icon = BlockIcons.ChevronRight,
-                        size = 14.dp,
-                        tint = palette.mutedDim,
-                        strokeWidth = 2f,
-                    )
-                }
-            }
-        }
-        if (showDivider) {
-            Box(
-                Modifier
-                    .padding(start = 64.dp)
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(palette.hairline),
-            )
-        }
-    }
-}
-
-/** `无缝衔接 · 15:30 结束后…` — the tip strip under the settings list. */
-@Composable
-private fun SeamHint(draft: TimeBlockDraft) {
-    val palette = AppTokens.palette
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 22.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0x2422D3EE), Color(0x1A6D5EF8))))
-            .border(1.dp, Color(0x3D22D3EE), RoundedCornerShape(18.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(26.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color(0x2E22D3EE)),
-            contentAlignment = Alignment.Center,
-        ) {
-            TimeBlockIcon(BlockIcons.Sparkle, size = 14.dp, tint = BrandColors.Cyan)
-        }
-        Spacer(Modifier.width(11.dp))
-        Text(
-            text = "无缝衔接 · 这块结束后，下一段时间从 ${TimeFormat.time(draft.endTime)} 起接上",
-            color = palette.textSecondary,
-            style = AppTokens.type.caption,
-        )
-    }
-}
-
-/** A small scrim + bottom card list used by the reminder / recurrence pickers. */
-@Composable
-private fun OptionSheet(
-    title: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onDismiss: () -> Unit,
-    onSelect: (Int) -> Unit,
-) {
-    val palette = AppTokens.palette
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0x9903040A))
-            .clickable(onClick = onDismiss),
-    ) {
-        SurfaceCard(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp)
-                .pointerInput(Unit) { /* swallow taps so the card itself does not dismiss */ },
-            shape = RoundedCornerShape(Radius.sheet),
-            contentPadding = 18.dp,
-        ) {
-            SectionTitle(title)
-            Spacer(Modifier.height(14.dp))
-            options.forEachIndexed { index, label ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Radius.inner))
-                        .clickable { onSelect(index) }
-                        .padding(horizontal = 14.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = label,
-                        color = if (index == selectedIndex) palette.text else palette.textSecondary,
-                        style = AppTokens.type.body.copy(
-                            fontWeight = if (index == selectedIndex) FontWeight(750) else FontWeight(650),
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (index == selectedIndex) {
-                        TimeBlockIcon(
-                            BlockIcons.Check,
-                            size = 16.dp,
-                            tint = BrandColors.accent(AppTokens.isDark),
-                            strokeWidth = 2.4f,
-                        )
+                HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                fun reminderLabel(n: Int)=if(n<0) "不提醒" else if(draft.allDay) {if(n==0) "当天 9 点" else "前一天 9 点"} else ReminderLead.label(n)
+                Box {
+                    Row(Modifier.fillMaxWidth().clickable {reminders=true}.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                        TimeBlockIcon(BlockIcons.Bell,tint=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("提醒",Modifier.weight(1f).padding(start=12.dp),style=MaterialTheme.typography.bodyMedium)
+                        Text(reminderLabel(draft.reminderMinutes),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.primary)
                     }
+                    DropdownMenu(reminders,{reminders=false}) {(if(draft.allDay) listOf(-1,0,1440) else listOf(-1,0,5,10,30,60)).forEach { n -> DropdownMenuItem(text={Text(reminderLabel(n))},onClick={draft=draft.copy(reminderMinutes=n);reminders=false})}}
                 }
+            }
+            OutlinedTextField(draft.notes.orEmpty(),{draft=draft.copy(notes=it)},label={Text("备注 / 地点")},modifier=Modifier.fillMaxWidth(),minLines=2,shape=RoundedCornerShape(14.dp))
+            Spacer(Modifier.height(8.dp))
+        }
+        Surface(color=MaterialTheme.colorScheme.background) {
+            Column(Modifier.padding(horizontal=20.dp,vertical=12.dp)) {
+                if(attempted && draft.validationError!=null) Text(draft.validationError!!,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))
+                Button({save()},Modifier.fillMaxWidth().heightIn(min=50.dp),shape=RoundedCornerShape(14.dp)) {Text("保存日程")}
             }
         }
     }
+    editingTime?.let { start ->
+        key(start) {
+            val time=if(start) draft.startTime else draft.endTime
+            var hour by remember {mutableStateOf(TextFieldValue(time.hour.toString().padStart(2,'0'),TextRange(0,2)))}
+            var minute by remember {mutableStateOf(TextFieldValue(time.minute.toString().padStart(2,'0'),TextRange(0,2)))}
+            val valid=hour.text.toIntOrNull() in 0..23 && minute.text.toIntOrNull() in 0..59
+            val focus=LocalFocusManager.current
+            val confirm={if(valid) chooseTime(start,LocalTime.of(hour.text.toInt(),minute.text.toInt()))}
+            AlertDialog(onDismissRequest={editingTime=null},title={Text(if(start) "选择开始时间" else "选择结束时间")},
+                text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(hour,{if(it.text.length<=2 && it.text.all(Char::isDigit)) hour=it},label={Text("小时")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Next),keyboardActions=KeyboardActions(onNext={focus.moveFocus(FocusDirection.Next)}))
+                        OutlinedTextField(minute,{if(it.text.length<=2 && it.text.all(Char::isDigit)) minute=it},label={Text("分钟")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number,imeAction=ImeAction.Done),keyboardActions=KeyboardActions(onDone={confirm()}))
+                    }
+                    if(!valid) Text("小时 0–23，分钟 0–59",color=MaterialTheme.colorScheme.error)
+                    Text("常用时间 · 点选即确定",style=MaterialTheme.typography.labelMedium)
+                    listOf(listOf("08:30","09:00","12:00"),listOf("14:00","18:00","20:00")).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {row.forEach { label ->
+                        OutlinedButton({chooseTime(start,LocalTime.parse(label))},Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp),shape=RoundedCornerShape(10.dp)) {Text(label,style=MaterialTheme.typography.labelMedium)}
+                    }}}
+                }},confirmButton={TextButton({confirm()},enabled=valid) {Text("确定")}},dismissButton={TextButton({editingTime=null}) {Text("取消")}})
+        }
+    }
+    if(discard) AlertDialog(onDismissRequest={discard=false},title={Text("放弃未保存的修改？")},confirmButton={TextButton(onBack) {Text("放弃修改")}},dismissButton={TextButton({discard=false}) {Text("继续编辑")}})
+    if(deleting) AlertDialog(onDismissRequest={deleting=false},title={Text("删除这条日程？")},confirmButton={TextButton({initial?.let {onDelete(it.id)}}) {Text("确认删除")}},dismissButton={TextButton({deleting=false}) {Text("取消")}})
 }

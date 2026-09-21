@@ -29,9 +29,10 @@ class BlockAlarmReceiver : BroadcastReceiver() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch {
             try {
-                val block = app.container.repository.blockById(blockId)
+                val block = app.container.repository.blockById(blockId) ?: return@launch
+                if (block.done || block.reminderMinutes < 0) return@launch
                 val title = block?.title ?: fallbackTitle.ifBlank { "时间段开始" }
-                val timeLabel = block?.start?.format(TimeFormatter) ?: ""
+                val timeLabel = if (block.allDay) "全天事项" else block.start.format(TimeFormatter)
                 val color = block?.category?.color?.value?.toLong()?.toInt() ?: DEFAULT_COLOR
                 ReminderNotifications.show(context, blockId, title, timeLabel, color)
             } finally {

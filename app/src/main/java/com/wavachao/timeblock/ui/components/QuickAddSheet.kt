@@ -27,6 +27,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -47,14 +55,9 @@ import com.wavachao.timeblock.ui.theme.Radius
 import com.wavachao.timeblock.ui.util.TimeFormat
 import java.time.LocalDate
 
-/**
- * Screen 1's 快速添加 sheet.
- *
- * Deliberately a hand-rolled overlay rather than `ModalBottomSheet`: the design needs the
- * scrim, the 34dp top radius and the grabber exactly as the mockup draws them, and the
- * sheet never grows tall enough to need drag-to-dismiss.
- */
+/** Standard modal sheet handles back, accessibility focus and keyboard insets. */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun QuickAddSheet(
     visible: Boolean,
     dates: List<LocalDate>,
@@ -65,27 +68,19 @@ fun QuickAddSheet(
     onDismiss: () -> Unit,
 ) {
     val palette = AppTokens.palette
-    AnimatedVisibility(visible = visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(0x94030409))
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
-                    onClick = onDismiss,
-                ),
-        )
-    }
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically(tween(420)) { it },
-        exit = slideOutVertically(tween(320)) { it },
+    if (!visible) return
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = palette.backgroundAlt,
+        dragHandle = null,
     ) {
         val sheetShape = RoundedCornerShape(topStart = Radius.sheet, topEnd = Radius.sheet)
         Column(
             Modifier
                 .fillMaxWidth()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
                 .clip(sheetShape)
                 .background(palette.backgroundAlt)
                 .border(1.dp, palette.strokeStrong, sheetShape)
@@ -130,7 +125,7 @@ fun QuickAddSheet(
                     textStyle = AppTokens.type.bodyStrong.copy(fontSize = 16.sp, color = palette.text),
                     cursorBrush = SolidColor(BrandColors.Secondary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+                    keyboardActions = KeyboardActions(onDone = { if (draft.title.isNotBlank()) onSubmit() }),
                     decorationBox = { inner ->
                         Box {
                             if (draft.title.isEmpty()) {
@@ -186,6 +181,7 @@ fun QuickAddSheet(
                 label = "创建时间段",
                 icon = BlockIcons.Check,
                 onClick = onSubmit,
+                enabled = draft.title.isNotBlank(),
             )
         }
     }
@@ -309,6 +305,7 @@ fun QuickAddFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(60.dp)
+            .semantics { contentDescription = "新建时间段" }
             .clip(shape)
             .background(BrandColors.brandGradient)
             .border(1.dp, Color(0x24FFFFFF), shape)

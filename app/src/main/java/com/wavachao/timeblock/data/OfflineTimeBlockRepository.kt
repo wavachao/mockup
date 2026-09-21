@@ -16,6 +16,7 @@ import java.time.YearMonth
 class OfflineTimeBlockRepository(
     private val dao: TimeBlockDao,
 ) : TimeBlockRepository {
+    override fun observeAll(): Flow<List<TimeBlock>> = dao.observeAll().map { rows -> rows.map { it.toModel() } }
 
     override fun observeDay(date: LocalDate): Flow<List<TimeBlock>> =
         dao.observeBetween(date.startOfDayMillis(), date.endOfDayMillisExclusive())
@@ -53,7 +54,8 @@ class OfflineTimeBlockRepository(
             return if (block.id != 0L) block.id else id
         }
 
-        val dates = horizon.dates.filter { it >= block.date && rule.matches(it.dayOfWeek) }
+        val dates = (0 until horizon.days).map { block.date.plusDays(it.toLong()) }
+            .filter { if (rule == RecurrenceRule.WEEKLY) it.dayOfWeek == block.date.dayOfWeek else rule.matches(it.dayOfWeek) }
         val rows = dates.map { date ->
             val dayShift = Duration.between(block.date.atStartOfDay(), date.atStartOfDay()).toDays()
             block.copy(
